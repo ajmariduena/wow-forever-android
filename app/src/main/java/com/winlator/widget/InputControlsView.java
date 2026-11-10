@@ -116,6 +116,7 @@ public class InputControlsView extends View {
     @Override
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
+        if (visibility != View.VISIBLE && profile != null) cancelTouchRouting();
         syncWoWVirtualGamepad();
     }
 
@@ -298,6 +299,12 @@ public class InputControlsView extends View {
 
     public int getSnappingSize() {
         return snappingSize;
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (!hasWindowFocus) cancelTouchRouting();
     }
 
     @Override
@@ -522,6 +529,7 @@ public class InputControlsView extends View {
     }
 
     public void setShowTouchscreenControls(boolean showTouchscreenControls) {
+        if (this.showTouchscreenControls && !showTouchscreenControls) cancelTouchRouting();
         this.showTouchscreenControls = showTouchscreenControls;
         syncWoWVirtualGamepad();
     }

@@ -111,6 +111,8 @@ class WoWXInputWiringTest {
                     assertTrue(binding.name, sent.dpad[binding.ordinal - Binding.GAMEPAD_DPAD_UP.ordinal])
                 else -> assertTrue(binding.name, sent.isPressed(binding.ordinal - Binding.GAMEPAD_BUTTON_A.ordinal))
             }
+            if (binding == Binding.GAMEPAD_BUTTON_L2 || binding == Binding.GAMEPAD_BUTTON_R2)
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(350))
             h.event(MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY())
             val released = h.packets.last()
             assertEquals(binding.name, 0, released.buttons.toInt())
@@ -123,20 +125,37 @@ class WoWXInputWiringTest {
     @Test fun bothTriggersAndDpadCanBeHeldTogetherForShiftedActionBars() {
         val h = Harness()
         fun point(id: Int, binding: Binding): Triple<Int,Float,Float> = h.element.woWGamepad.buttonBounds(binding).let { Triple(id,it.centerX(),it.centerY()) }
-        val lt = point(1, Binding.GAMEPAD_BUTTON_L2)
-        val rt = point(2, Binding.GAMEPAD_BUTTON_R2)
+        val combined = h.element.woWGamepad.barBounds(WoWBarKeys.Key.LTRT)
+        val lt = Triple(1, combined.centerX(), combined.centerY())
         val up = point(3, Binding.GAMEPAD_DPAD_UP)
         h.multi(MotionEvent.ACTION_DOWN, listOf(lt))
-        h.multi(MotionEvent.ACTION_POINTER_DOWN or (1 shl 8), listOf(lt, rt))
-        h.multi(MotionEvent.ACTION_POINTER_DOWN or (2 shl 8), listOf(lt, rt, up))
+        h.multi(MotionEvent.ACTION_POINTER_DOWN or (1 shl 8), listOf(lt, up))
         assertEquals(1f, h.packets.last().triggerL, 0f)
         assertEquals(1f, h.packets.last().triggerR, 0f)
-        assertTrue(h.packets.last().dpad[0])
-        h.multi(MotionEvent.ACTION_POINTER_UP or (2 shl 8), listOf(lt, rt, up))
-        h.multi(MotionEvent.ACTION_POINTER_UP or (1 shl 8), listOf(lt, rt))
+        assertFalse(h.packets.last().dpad[0])
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(24))
+        assertTrue(h.profile.gamepadState.dpad[0])
+        h.multi(MotionEvent.ACTION_POINTER_UP or (1 shl 8), listOf(lt, up))
         h.multi(MotionEvent.ACTION_UP, listOf(lt))
         assertEquals(0f, h.packets.last().triggerL, 0f)
         assertEquals(0f, h.packets.last().triggerR, 0f)
+    }
+
+    @Test fun hiddenAndUnfocusedControlsReleaseArmedModifiers() {
+        val h = Harness()
+        val bounds = h.element.woWGamepad.barBounds(WoWBarKeys.Key.LTRT)
+        fun arm() {
+            h.event(MotionEvent.ACTION_DOWN, bounds.centerX(), bounds.centerY())
+            h.event(MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY())
+            assertEquals(1f, h.profile.gamepadState.triggerL, 0f)
+        }
+        arm(); h.view.setShowTouchscreenControls(false)
+        assertEquals(0f, h.profile.gamepadState.triggerL, 0f)
+        assertEquals(0f, h.profile.gamepadState.triggerR, 0f)
+        h.view.setShowTouchscreenControls(true)
+        arm(); h.view.onWindowFocusChanged(false)
+        assertEquals(0f, h.profile.gamepadState.triggerL, 0f)
+        assertEquals(0f, h.profile.gamepadState.triggerR, 0f)
     }
     @Test fun bothSticksReachEverySignedAxisAndReturnToCenter() {
         val h = Harness()
@@ -189,11 +208,15 @@ class WoWXInputWiringTest {
             val pad = WoWTouchGamepad(view)
             pad.setPanelBounds(panel, panel)
             val bindings = Binding.values().filter { it.name.startsWith("GAMEPAD_BUTTON_") || it.name.startsWith("GAMEPAD_DPAD_") } + Binding.NONE + Binding.SHOW_KEYBOARD
-            val bounds = bindings.map { pad.buttonBounds(it) }
+            val bounds = bindings.map { pad.buttonBounds(it) } + listOf(
+                pad.barBounds(WoWBarKeys.Key.LTRT), pad.barBounds(WoWBarKeys.Key.LBRB))
+            val names = bindings.map { it.name } + listOf("LT+RT", "LB+RB")
+            val minimum = 44 * context.resources.displayMetrics.density
+            bounds.forEach { assertTrue("Target smaller than 44dp", it.width() >= minimum) }
             for (i in bounds.indices) for (j in i+1 until bounds.size) {
                 val a = bounds[i]; val b = bounds[j]
                 val distance = Math.hypot((a.centerX()-b.centerX()).toDouble(), (a.centerY()-b.centerY()).toDouble())
-                assertTrue("${bindings[i]} overlaps ${bindings[j]} in $w x $h", distance >= (a.width()+b.width())/2)
+                assertTrue("${names[i]} overlaps ${names[j]} in $w x $h", distance >= (a.width()+b.width())/2)
             }
         }
     }

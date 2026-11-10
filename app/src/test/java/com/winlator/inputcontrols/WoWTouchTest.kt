@@ -59,9 +59,9 @@ class WoWTouchTest {
     @Test fun shoulderButtonReleasesWithoutMoving() {
         val view = view()
         val pad = WoWTouchGamepad(view)
-        pad.down(1, 105f, 117f)
+        pad.down(1, 126f, 234f)
         verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_L2, true)
-        pad.up(1)
+        pad.cancel()
         verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_L2, false)
         verify(view, never()).handleInputEvent(eq(Binding.GAMEPAD_LEFT_THUMB_RIGHT), any(), any())
     }
@@ -70,7 +70,7 @@ class WoWTouchTest {
         whenever(view.width).thenReturn(900)
         whenever(view.height).thenReturn(1000)
         val pad = WoWTouchGamepad(view)
-        pad.down(1, 280f, 860f)
+        pad.down(1, 452f, 870f)
         verify(view).handleInputEvent(Binding.GAMEPAD_DPAD_LEFT, true)
         pad.move(1, 200f, 860f)
         verify(view, never()).handleInputEvent(eq(Binding.GAMEPAD_LEFT_THUMB_RIGHT), any(), any())
@@ -134,6 +134,29 @@ class WoWTouchTest {
             file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
             assertTrue(file.length() > 1000)
         }
+    }
+    @Test fun modifierPrecedesSlidAbilityAndCancelDropsPendingPress() {
+        val view = view()
+        val pad = WoWTouchGamepad(view)
+        val lt = pad.buttonBounds(Binding.GAMEPAD_BUTTON_L2)!!
+        val a = pad.buttonBounds(Binding.GAMEPAD_BUTTON_A)!!
+        pad.down(1, lt.centerX(), lt.centerY())
+        pad.move(1, a.centerX(), a.centerY())
+        verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_L2, true)
+        verify(view, never()).handleInputEvent(Binding.GAMEPAD_BUTTON_A, true)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(24))
+        val order = inOrder(view)
+        order.verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_L2, true)
+        order.verify(view).commitGamepadState()
+        order.verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_A, true)
+        pad.up(1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(60))
+        verify(view).handleInputEvent(Binding.GAMEPAD_BUTTON_L2, false)
+        pad.down(2, lt.centerX(), lt.centerY())
+        pad.down(3, a.centerX(), a.centerY())
+        pad.cancel()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(4))
+        verify(view, times(1)).handleInputEvent(Binding.GAMEPAD_BUTTON_A, true)
     }
     @Test fun malformedSensitivityIsBounded() {
         val pad = WoWTouchGamepad(view())

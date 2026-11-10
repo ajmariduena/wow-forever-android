@@ -2,6 +2,7 @@ package com.winlator.inputcontrols;
 
 import android.graphics.*;
 import android.util.Log;
+import android.os.SystemClock;
 import android.graphics.drawable.Drawable;
 import com.winlator.widget.InputControlsView;
 import org.json.JSONObject;
@@ -22,9 +23,71 @@ public final class WoWTouchGamepad {
     private int width, height, hingeTop = -1, hingeBottom = -1;
     private boolean floatingStick = true, cameraDrag = true;
     private float cameraSensitivity = 1;
+    private final WoWBarKeys bars = new WoWBarKeys();
+    private WoWBarKeys.Key publishedBar;
+    private final Runnable barTimer = () -> { bars.tick(SystemClock.uptimeMillis()); publishBar(); };
+    private final HashMap<Button, Runnable> pendingAbilities = new HashMap<>();
+    private final HashMap<Button, Runnable> pendingReleases = new HashMap<>();
+    private final java.util.HashSet<Button> releasedAbilities = new java.util.HashSet<>();
+    private final java.util.HashSet<Button> sentAbilities = new java.util.HashSet<>();
+    private static WoWBarKeys.Key barKey(Button b) {
+        switch (b.label) {
+            case "LT": return WoWBarKeys.Key.LT;
+            case "RT": return WoWBarKeys.Key.RT;
+            case "LT+RT": return WoWBarKeys.Key.LTRT;
+            case "LB+RB": return WoWBarKeys.Key.LBRB;
+            default: return null;
+        }
+    }
+    private static boolean ability(Button b) {
+        return b.binding == Binding.GAMEPAD_BUTTON_A || b.binding == Binding.GAMEPAD_BUTTON_B
+            || b.binding == Binding.GAMEPAD_BUTTON_X || b.binding == Binding.GAMEPAD_BUTTON_Y
+            || b.binding == Binding.GAMEPAD_DPAD_UP || b.binding == Binding.GAMEPAD_DPAD_DOWN
+            || b.binding == Binding.GAMEPAD_DPAD_LEFT || b.binding == Binding.GAMEPAD_DPAD_RIGHT;
+    }
+    private void modifier(WoWBarKeys.Key key, boolean down) {
+        if (key == null) return;
+        if (key == WoWBarKeys.Key.LT || key == WoWBarKeys.Key.LTRT) view.handleInputEvent(Binding.GAMEPAD_BUTTON_L2, down);
+        if (key == WoWBarKeys.Key.RT || key == WoWBarKeys.Key.LTRT) view.handleInputEvent(Binding.GAMEPAD_BUTTON_R2, down);
+        if (key == WoWBarKeys.Key.LBRB) {
+            view.handleInputEvent(Binding.GAMEPAD_BUTTON_L1, down);
+            view.handleInputEvent(Binding.GAMEPAD_BUTTON_R1, down);
+        }
+    }
+    private void publishBar() {
+        if (publishedBar != bars.armed()) {
+            modifier(publishedBar, false); modifier(bars.armed(), true);
+            publishedBar = bars.armed(); view.commitGamepadState();
+        }
+        view.removeCallbacks(barTimer);
+        if (bars.deadline() >= 0) view.postDelayed(barTimer, Math.max(1, bars.deadline() - SystemClock.uptimeMillis()));
+        view.invalidate();
+    }
+    private void pressAbility(Button b, int id) {
+        if (b.pointer >= 0 || pendingAbilities.containsKey(b) || sentAbilities.contains(b)) return;
+        b.pointer = id; bars.pressAbility(); publishBar();
+        // The shared-memory pad is polled by the guest: leave a frame for the modifier before the ability.
+        Runnable press = () -> {
+            pendingAbilities.remove(b); sentAbilities.add(b);
+            view.handleInputEvent(b.binding, true); view.commitGamepadState();
+            if (releasedAbilities.remove(b)) {
+                Runnable release = () -> { pendingReleases.remove(b); releaseAbility(b); };
+                pendingReleases.put(b, release); view.postDelayed(release, 24);
+            }
+        };
+        pendingAbilities.put(b, press);
+        if (bars.armed() == null) press.run(); else view.postDelayed(press, 24);
+    }
+    private void releaseAbility(Button b) {
+        if (pendingAbilities.containsKey(b)) { releasedAbilities.add(b); return; }
+        if (!sentAbilities.remove(b)) return;
+        view.handleInputEvent(b.binding, false); view.commitGamepadState();
+        bars.releaseAbility(SystemClock.uptimeMillis()); publishBar();
+    }
 
     private static final class Button {
-        final float x, y, size;
+        final float x, y;
+        float size;
         final String label, gem;
         final Binding binding;
         int pointer = -1;
@@ -65,35 +128,38 @@ public final class WoWTouchGamepad {
         float panelTop = flex ? hingeBottom : 0;
         float panelScale = flex ? (h-panelTop)/(h*.5f) : 1;
         float unit = h * panelScale;
-        float faceSize = unit * (cover ? .15f : flex ? .095f : .11f);
-        float small = unit * (cover ? .10f : flex ? .065f : .075f);
-        float dp = unit * (cover ? .095f : flex ? .062f : .07f);
+        float minimum = 44 * view.getResources().getDisplayMetrics().density;
+        float faceSize = Math.max(minimum, unit * (cover ? .15f : flex ? .095f : .11f));
+        float small = Math.max(minimum, unit * (cover ? .10f : flex ? .06f : .075f));
+        float dp = Math.max(minimum, unit * (cover ? .095f : .07f));
+        float shift = Math.max(minimum, unit * (cover ? .10f : flex ? .075f : .085f));
         stickSize = unit * (cover ? .38f : flex ? .22f : .27f);
-        float[] values = cover ? new float[]{30,30,14,66,39,80,86,60,5,13,13,13,78,30,87,30,41,10,50,10,59,10}
-            : flex ? new float[]{34,63,17,82,47,85,80,79,7,58,17,58,83,58,93,58,40,58,50,58,60,58}
-            : new float[]{32,54,16,78,42,86,83,74,7,46,17,46,83,46,93,46,40,6,50,6,60,6};
-        zoneRight = w*values[0]/100; zoneTop = py(values[1], flex, panelTop, panelScale);
-        restX = w*values[2]/100; restY = py(values[3], flex, panelTop, panelScale);
-        float fx = w*values[6]/100, fy = py(values[7], flex, panelTop, panelScale), gap = faceSize*.8f;
+        float[] v = cover ? new float[]{32,45,15,72,68,74,87,62,6,26,15,16,24,26,95,30,95,10,77,10,33,10,40,10,47,10,54,10,61,10,68,10}
+            : flex ? new float[]{36,68,18,85,56,87,83,80,8,61,19,57,30,61,95,63.5f,95,54.5f,76,56,44,64,54,64,40,54.5f,48,54.5f,56,54.5f,64,54.5f}
+            : new float[]{34,64,17,82,58,87,84,80,7,56,17,52,27,56,94,62,94,52,78,6,30,6,38,6,46,6,54,6,62,6,70,6};
+        zoneRight = w*v[0]/100; zoneTop = py(v[1],flex,panelTop,panelScale);
+        restX = w*v[2]/100; restY = py(v[3],flex,panelTop,panelScale);
+        float fx = w*v[6]/100, fy = py(v[7],flex,panelTop,panelScale), gap = faceSize*.8f;
         add(fx,fy+gap,faceSize,"A","green",Binding.GAMEPAD_BUTTON_A);
         add(fx+gap,fy,faceSize,"B","crimson",Binding.GAMEPAD_BUTTON_B);
         add(fx-gap,fy,faceSize,"X","blue",Binding.GAMEPAD_BUTTON_X);
         add(fx,fy-gap,faceSize,"Y","gold",Binding.GAMEPAD_BUTTON_Y);
-        String[] labels = {"▲","▶","▼","◀","LT","LB","RB","RT","VIEW","⌨","MENU"};
-        Binding[] bindings = {Binding.GAMEPAD_DPAD_UP,Binding.GAMEPAD_DPAD_RIGHT,Binding.GAMEPAD_DPAD_DOWN,Binding.GAMEPAD_DPAD_LEFT,
-            Binding.GAMEPAD_BUTTON_L2,Binding.GAMEPAD_BUTTON_L1,Binding.GAMEPAD_BUTTON_R1,Binding.GAMEPAD_BUTTON_R2,
-            Binding.GAMEPAD_BUTTON_SELECT,Binding.SHOW_KEYBOARD,Binding.GAMEPAD_BUTTON_START};
-        float dx = w*values[4]/100, dy = py(values[5],flex,panelTop,panelScale);
-        for (int i=0;i<4;i++) add(dx+(i==1?dp*1.02f:i==3?-dp*1.02f:0),dy+(i==2?dp*1.02f:i==0?-dp*1.02f:0),dp,labels[i],null,bindings[i]);
-        for (int i=4;i<11;i++) {
-            int index = 8+(i-4)*2;
-            add(w*values[index]/100,py(values[index+1],flex,panelTop,panelScale),small,labels[i],null,bindings[i]);
+        Binding[] directions = {Binding.GAMEPAD_DPAD_UP,Binding.GAMEPAD_DPAD_RIGHT,Binding.GAMEPAD_DPAD_DOWN,Binding.GAMEPAD_DPAD_LEFT};
+        String[] arrows = {"▲","▶","▼","◀"};
+        float dx = w*v[4]/100, dy = py(v[5],flex,panelTop,panelScale);
+        for (int i=0;i<4;i++) add(dx+(i==1?dp*1.02f:i==3?-dp*1.02f:0),dy+(i==2?dp*1.02f:i==0?-dp*1.02f:0),dp,arrows[i],null,directions[i]);
+        String[] labels = {"LT","LT+RT","RT","RB","LB","LB+RB","L3","R3","VIEW","⌨","MENU","MOUSE"};
+        Binding[] bindings = {Binding.GAMEPAD_BUTTON_L2,Binding.NONE,Binding.GAMEPAD_BUTTON_R2,Binding.GAMEPAD_BUTTON_R1,Binding.GAMEPAD_BUTTON_L1,Binding.NONE,Binding.GAMEPAD_BUTTON_L3,Binding.GAMEPAD_BUTTON_R3,Binding.GAMEPAD_BUTTON_SELECT,Binding.SHOW_KEYBOARD,Binding.GAMEPAD_BUTTON_START,Binding.NONE};
+        for (int i=0;i<labels.length;i++) add(w*v[8+i*2]/100,py(v[9+i*2],flex,panelTop,panelScale),i<3?shift:small,labels[i],i==0?"purple":i==1?"gray":i==2?"red-orange":null,bindings[i]);
+        // Keep the prototype centers while trimming art/hit circles on narrow aspect ratios.
+        for (int i=0;i<buttons.size();i++) for (int j=i+1;j<buttons.size();j++) {
+            Button a = buttons.get(i), b = buttons.get(j);
+            float distance = (float)Math.hypot(a.x-b.x,a.y-b.y) - 2;
+            if ((a.size+b.size)/2 > distance) {
+                float available = Math.max(minimum, distance);
+                a.size = Math.min(a.size, available); b.size = Math.min(b.size, available);
+            }
         }
-        float[] extras = cover ? new float[]{25,36,94,44,68,10}
-            : flex ? new float[]{28,67,94,69,71,58} : new float[]{27,60,94,58,70,6};
-        add(w*extras[0]/100,py(extras[1],flex,panelTop,panelScale),small,"L3",null,Binding.GAMEPAD_BUTTON_L3);
-        add(w*extras[2]/100,py(extras[3],flex,panelTop,panelScale),small,"R3",null,Binding.GAMEPAD_BUTTON_R3);
-        add(w*extras[4]/100,py(extras[5],flex,panelTop,panelScale),small,"MOUSE",null,Binding.NONE);
     }
     private float py(float percent, boolean flex, float top, float scale) {
         return flex ? top+(percent-50)*height/100*scale : percent*height/100;
@@ -113,14 +179,17 @@ public final class WoWTouchGamepad {
         layout();
         if (hingeTop >= 0) { paint.setColor(0xff120d08); canvas.drawRect(0,hingeTop,width,height,paint); }
         for (Button b:buttons) {
-            String state = (b.pointer >= 0 || (b.label.equals("MOUSE") && view.isWoWMouseMode())) ? "pressed" : "normal";
+            String state = (b.pointer >= 0 || (barKey(b) != null && bars.armed() == barKey(b)) || (b.label.equals("MOUSE") && view.isWoWMouseMode())) ? "pressed" : "normal";
             if (b.gem != null) image(canvas,"gem-"+b.gem+"-"+state,b.x,b.y,b.size*.76f,255);
             image(canvas,"frame-"+(b.gem == null?"menu":"ability")+"-"+state,b.x,b.y,b.size,255);
+            if (barKey(b) != null && bars.armed() == barKey(b) && bars.locked()) {
+                paint.setColor(0xffffd76e); canvas.drawCircle(b.x,b.y-b.size*.39f,b.size*.065f,paint);
+            }
             if (b.label.equals("MOUSE")) { image(canvas,"mouse",b.x,b.y,b.size*.4f,255); continue; }
             if (b.binding == Binding.SHOW_KEYBOARD) { image(canvas,"keyboard",b.x,b.y,b.size*.4f,255); continue; }
             paint.setColor(b.gem == null ? 0xfff0dca6 : 0xfffff7e0);
             paint.setTypeface(Typeface.create(b.gem == null ? "sans-serif" : "serif",Typeface.BOLD));
-            paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(b.size*(b.gem == null ? .25f : .42f));
+            paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(b.size*(b.label.length() > 2 ? .20f : b.gem == null ? .25f : .42f));
             paint.setShadowLayer(3,0,1,Color.BLACK);
             canvas.drawText(b.label,b.x,b.y-(paint.ascent()+paint.descent())/2,paint); paint.clearShadowLayer();
         }
@@ -131,13 +200,21 @@ public final class WoWTouchGamepad {
     }
     RectF buttonBounds(Binding binding) {
         layout();
-        for (Button b : buttons) if (b.binding == binding) return new RectF(b.x-b.size/2,b.y-b.size/2,b.x+b.size/2,b.y+b.size/2);
+        for (Button b : buttons) if (b.binding == binding && (binding != Binding.NONE || b.label.equals("MOUSE"))) return new RectF(b.x-b.size/2,b.y-b.size/2,b.x+b.size/2,b.y+b.size/2);
+        return null;
+    }
+    RectF barBounds(WoWBarKeys.Key key) {
+        layout();
+        for (Button b:buttons) if (barKey(b) == key) return new RectF(b.x-b.size/2,b.y-b.size/2,b.x+b.size/2,b.y+b.size/2);
         return null;
     }
     public boolean down(int id,float x,float y) {
         layout();
         for (Button b:buttons) if (b.hit(x,y)) {
             if (b.label.equals("MOUSE")) { view.setWoWMouseMode(!view.isWoWMouseMode()); mouseTogglePointer=id; Log.i("WoWTouch", "button down " + b.binding.name()); return true; }
+            if (barKey(b) != null) { bars.down(barKey(b),id,SystemClock.uptimeMillis()); publishBar(); return true; }
+            if (ability(b)) { pressAbility(b,id); view.invalidate(); return true; }
+            if (b.binding == Binding.SHOW_KEYBOARD || b.binding == Binding.GAMEPAD_BUTTON_START) cancel();
             if (b.pointer < 0) { b.pointer=id; Log.i("WoWTouch", "button down " + b.binding.name()); view.handleInputEvent(b.binding,true); view.invalidate(); }
             return true;
         }
@@ -156,6 +233,10 @@ public final class WoWTouchGamepad {
             stick.move(x,y,stickSize*.3f); axis(false,stick.x,stick.y); view.invalidate(); return true;
         }
         for (Button b:buttons) if (b.pointer == id) return true;
+        if (id == bars.pointer()) {
+            for (Button b:buttons) if (ability(b) && b.hit(x,y)) { pressAbility(b,id); break; }
+            return true;
+        }
         return pointerGestures.move(id,x,y);
     }
     private void axis(boolean right,float x,float y) {
@@ -164,18 +245,26 @@ public final class WoWTouchGamepad {
     }
     public boolean up(int id) {
         boolean handled=false;
+        if (id >= 0 && bars.pointer() == id) { bars.up(id,SystemClock.uptimeMillis()); publishBar(); handled=true; }
         if (id >= 0 && id == mouseTogglePointer) { mouseTogglePointer=-1; Log.i("WoWTouch", "button up " + Binding.NONE.name()); handled=true; }
         if (id == movementPointer && id >= 0) { movementPointer=-1; stick.release(); axis(false,0,0); handled=true; }
-        for (Button b:buttons) if (b.pointer == id && id >= 0) { b.pointer=-1; Log.i("WoWTouch", "button up " + b.binding.name()); view.handleInputEvent(b.binding,false); handled=true; }
+        for (Button b:buttons) if (b.pointer == id && id >= 0) { b.pointer=-1; Log.i("WoWTouch", "button up " + b.binding.name()); if (ability(b)) releaseAbility(b); else view.handleInputEvent(b.binding,false); handled=true; }
         if (pointerGestures.up(id)) handled = true;
         view.invalidate(); return handled;
     }
     public boolean cancel() {
-        boolean active = movementPointer >= 0;
+        boolean active = movementPointer >= 0 || bars.armed() != null;
+        view.removeCallbacks(barTimer);
+        for (Runnable task:pendingAbilities.values()) view.removeCallbacks(task);
+        for (Runnable task:pendingReleases.values()) view.removeCallbacks(task);
+        pendingReleases.clear(); pendingAbilities.clear(); releasedAbilities.clear();
+        for (Button b:sentAbilities) view.handleInputEvent(b.binding,false);
+        sentAbilities.clear(); bars.reset(); publishBar();
         if (pointerGestures.cancel()) active = true;
         up(mouseTogglePointer);
         up(movementPointer);
         for (Button b:buttons) if (b.pointer >= 0) { up(b.pointer); active=true; }
+        view.commitGamepadState();
         return active;
     }
 }
