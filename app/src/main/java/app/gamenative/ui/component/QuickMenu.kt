@@ -62,6 +62,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -552,7 +553,15 @@ fun QuickMenu(
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        QuickMenuCloseButton(onClick = onDismiss)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                onPerformanceHudConfigChanged(applyPerformanceHudPreset(performanceHudConfig, PerformanceHudPreset.FPS_ONLY))
+                                if (!isPerformanceHudEnabled) onItemSelected(QuickMenuAction.PERFORMANCE_HUD)
+                            }) {
+                                Text("FPS")
+                            }
+                            QuickMenuCloseButton(onClick = onDismiss)
+                        }
                     }
 
                     HorizontalDivider(
