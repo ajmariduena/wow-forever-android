@@ -790,6 +790,7 @@ fun QuickMenu(
                                                 .focusGroup(),
                                             verticalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
+                                            WoWCameraSensitivityControl(container)
                                             val gyroEnabled = gyroMenu?.settings?.mode
                                                 ?.let { it != GyroSettings.MODE_DISABLED } == true
                                             controllerItems.forEachIndexed { index, item ->
