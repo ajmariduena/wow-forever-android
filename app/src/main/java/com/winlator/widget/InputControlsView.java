@@ -1053,7 +1053,7 @@ public class InputControlsView extends View {
         commitGamepadState();
     }
 
-    private void commitGamepadState() {
+    public void commitGamepadState() {
         if (xServer == null || profile == null) return;
         WinHandler winHandler = xServer.getWinHandler();
         if (winHandler != null) {

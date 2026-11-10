@@ -77,13 +77,5 @@ public final class WoWTouchGeometry {
         public boolean isActive() { return active; }
     }
 
-    public static float[] rightStick(float x, float y, float originX, float originY, float radius) {
-        float dx = (x - originX) / Math.max(1, radius), dy = (y - originY) / Math.max(1, radius);
-        float distance = (float)Math.hypot(dx, dy);
-        if (distance <= .08f) return new float[]{0, 0};
-        float length = Math.min(1, (distance - .08f) / .92f);
-        return new float[]{dx / distance * length, dy / distance * length};
-    }
-
     private WoWTouchGeometry() {}
 }

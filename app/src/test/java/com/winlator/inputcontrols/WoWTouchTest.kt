@@ -27,14 +27,6 @@ class WoWTouchTest {
         assertEquals(50f, stick.originX, 0f)
         assertEquals(0f, stick.y, 0f)
     }
-    @Test fun rightStickOriginCanFloatWithoutChangingDeflection() {
-        val first = WoWTouchGeometry.rightStick(140f, 80f, 100f, 100f, 100f)
-        val translated = WoWTouchGeometry.rightStick(540f, 380f, 500f, 400f, 100f)
-        assertArrayEquals(first, translated, .0001f)
-        assertTrue(first[0] > 0)
-        assertTrue(first[1] < 0)
-        assertTrue(Math.hypot(first[0].toDouble(), first[1].toDouble()) < 1)
-    }
     @Test fun coverOpenAndFlexSelection() {
         assertEquals(WoWTouchGeometry.Layout.COVER, WoWTouchGeometry.layout(2100f, 900f, false, false))
         assertEquals(WoWTouchGeometry.Layout.OPEN, WoWTouchGeometry.layout(1100f, 1000f, false, true))
@@ -46,6 +38,9 @@ class WoWTouchTest {
         whenever(isWoWGamePoint(any(), any())).thenReturn(true)
         whenever(width).thenReturn(2100)
         whenever(height).thenReturn(900)
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        whenever(postDelayed(any(), any())).thenAnswer { call -> handler.postDelayed(call.getArgument(0), call.getArgument(1)) }
+        whenever(removeCallbacks(any())).thenAnswer { call -> handler.removeCallbacks(call.getArgument(0)); true }
         whenever(maxWidth).thenReturn(2100)
         whenever(maxHeight).thenReturn(900)
     }
@@ -97,6 +92,7 @@ class WoWTouchTest {
         pad.down(1, 200f, 500f)
         pad.down(2, 1000f, 450f)
         pad.move(2, 1200f, 450f)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(16))
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
         pad.up(2)
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)
@@ -113,11 +109,12 @@ class WoWTouchTest {
         assertTrue(element.woWGamepad.isFloatingStick)
         assertTrue(element.woWGamepad.isCameraDrag)
         element.woWGamepad.readOptions(JSONObject("""{"floatingStick":false,"cameraDrag":false,"cameraSensitivity":2}"""))
+        element.woWGamepad.cameraSensitivity = 3.5f
         profile.save()
         profile.loadElements(view())
         assertFalse(profile.elements.first().woWGamepad.isFloatingStick)
         assertFalse(profile.elements.first().woWGamepad.isCameraDrag)
-        assertEquals(2f, profile.elements.first().woWGamepad.cameraSensitivity, 0f)
+        assertEquals(3.5f, profile.elements.first().woWGamepad.cameraSensitivity, 0f)
     }
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test fun renderAllLayoutsWithShippingResources() {

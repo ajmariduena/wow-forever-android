@@ -47,10 +47,14 @@ class WoWXInputWiringTest {
             output.channel.map(FileChannel.MapMode.READ_WRITE, 0, 64).apply { order(ByteOrder.LITTLE_ENDIAN) }
         }
         val packets = mutableListOf<GamepadState>()
+        fun rightX() = memory.getShort(8)
         init {
             ControllerManager.getInstance().init(context)
             whenever(server.getWinHandler()).thenReturn(handler)
             ReflectionHelpers.setField(handler, "gamepadBuffer", memory)
+            val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+            activity.setContentView(view, android.view.ViewGroup.LayoutParams(1100, 1000))
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
             view.layout(0, 0, 1100, 1000)
             view.setTouchpadView(mock<TouchpadView>())
             ReflectionHelpers.setField(view, "xServer", server)
@@ -70,6 +74,9 @@ class WoWXInputWiringTest {
         }
         private fun send(event: MotionEvent) {
             view.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(16))
+            }
             event.recycle()
             assertEquals(1, memory.getInt(40))
             packets += GamepadState().apply {
@@ -164,6 +171,15 @@ class WoWXInputWiringTest {
         val a = h.element.woWGamepad.buttonBounds(Binding.GAMEPAD_BUTTON_A)
         h.event(MotionEvent.ACTION_DOWN, a.centerX(), a.centerY())
         assertTrue(h.packets.last().isPressed(ExternalController.IDX_BUTTON_A.toInt()))
+    }
+    @Test fun cameraDecayReachesSharedXInputMemoryWithoutAnotherTouchEvent() {
+        val h = Harness()
+        h.event(MotionEvent.ACTION_DOWN, 550f, 300f)
+        h.event(MotionEvent.ACTION_MOVE, 750f, 300f)
+        assertTrue(h.rightX() > 0)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(44))
+        assertEquals(0, h.rightX().toInt())
+        h.event(MotionEvent.ACTION_UP, 750f, 300f)
     }
     @Test fun allButtonsHaveSeparateHitTargetsInCoverOpenAndPanelLayouts() {
         val context = RuntimeEnvironment.getApplication()

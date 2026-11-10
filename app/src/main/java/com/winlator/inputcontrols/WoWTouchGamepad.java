@@ -37,12 +37,13 @@ public final class WoWTouchGamepad {
     public boolean isFloatingStick() { return floatingStick; }
     public boolean isCameraDrag() { return cameraDrag; }
     public float getCameraSensitivity() { return cameraSensitivity; }
+    public void setCameraSensitivity(float sensitivity) {
+        cameraSensitivity = Float.isFinite(sensitivity) ? Math.max(.1f, Math.min(5, sensitivity)) : 1;
+    }
     public void readOptions(JSONObject data) {
         floatingStick = data.optBoolean("floatingStick", true);
         cameraDrag = data.optBoolean("cameraDrag", true);
-        cameraSensitivity = (float)data.optDouble("cameraSensitivity", 1);
-        if (!Float.isFinite(cameraSensitivity)) cameraSensitivity = 1;
-        cameraSensitivity = Math.max(.1f, Math.min(5, cameraSensitivity));
+        setCameraSensitivity((float)data.optDouble("cameraSensitivity", 1));
     }
     public void writeOptions(JSONObject data) throws JSONException {
         data.put("floatingStick", floatingStick);
