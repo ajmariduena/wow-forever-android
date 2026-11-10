@@ -1,9 +1,7 @@
 package app.gamenative.ui.screen.wow
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -28,7 +26,6 @@ object WoWRetryLogin {
 fun WoWRetryLoginHost(container: Container) {
     val context = LocalContext.current
     val requested by WoWRetryLogin.requested.collectAsState()
-    var confirmed by remember(requested) { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember(requested) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -55,18 +52,14 @@ fun WoWRetryLoginHost(container: Container) {
         text = {
             Column {
                 Text(message ?: if (busy) "Rellenando contraseña…" else
-                    "Antes de abrir este menú, cierra el error de WoW y toca su campo Contraseña. El correo debe seguir guardado en WoW. No podemos detectar la pantalla de inicio de sesión: no continúes si estás dentro del juego o en el chat. Solo se rellenará la contraseña; después toca Entrar en WoW.")
-                if (!busy && message == null) Row {
-                    Checkbox(checked = confirmed, onCheckedChange = { confirmed = it })
-                    Text("Estoy en el inicio de sesión y seleccioné Contraseña")
-                }
+                    "Toca el campo Contraseña de WoW y luego este botón. Solo se escribe la contraseña; después toca Entrar.")
             }
         },
         confirmButton = {
-            TextButton(enabled = confirmed && !busy && message == null, onClick = {
+            TextButton(enabled = !busy && message == null, onClick = {
                 val login = BattleNetSignIn.load(context)
                 val keyboard = PluviaApp.xServerView?.getxServer()?.keyboard
-                val steps = login?.let { WoWRetrySequence.build(it.password, confirmed) }
+                val steps = login?.let { WoWRetrySequence.build(it.password, true) }
                 if (steps == null || keyboard == null) {
                     message = "No se puede rellenar esta contraseña. Abre el teclado de la app para escribirla manualmente."
                 } else {
