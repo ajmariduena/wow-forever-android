@@ -54,4 +54,24 @@ class GameConfigTest {
             configWtf(root).readLines().filter { it.contains("Resolution ") },
         )
     }
+
+    @Test
+    fun importedDistances_areCappedWithoutRaisingLowerValues() {
+        val root = install("us", "SET farclip \"3000\"\nSET horizonClip \"900\"\nSET RAIDfarclip \"800\"\nSET vsync \"1\"\n")
+        ensureGameConfig(root, "1280x720", null)
+        val first = configWtf(root).readText()
+        org.junit.Assert.assertTrue(first.contains("SET farclip \"1200\""))
+        org.junit.Assert.assertTrue(first.contains("SET horizonClip \"900\""))
+        org.junit.Assert.assertTrue(first.contains("SET RAIDfarclip \"800\""))
+        org.junit.Assert.assertTrue(first.contains("SET vsync \"1\""))
+        ensureGameConfig(root, "1280x720", null)
+        assertEquals(first, configWtf(root).readText())
+    }
+
+    @Test
+    fun driverPreference_defaultsToBaselineAndRestoresVariants() {
+        assertEquals(WoWGraphicsDriver.V32_SYSMEM, WoWGraphicsDriver.fromSaved(null))
+        assertEquals(WoWGraphicsDriver.V32_SYSMEM, WoWGraphicsDriver.fromSaved("unknown"))
+        WoWGraphicsDriver.entries.forEach { assertEquals(it, WoWGraphicsDriver.fromSaved(it.name)) }
+    }
 }
