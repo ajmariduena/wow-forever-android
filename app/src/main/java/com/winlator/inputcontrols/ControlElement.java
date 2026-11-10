@@ -38,7 +38,7 @@ public class ControlElement {
     public static final float DEFAULT_BUTTON_STROKE_SCALE = 1.0f;
     public static final boolean DEFAULT_LOOK_THROUGH = false;
     public enum Type {
-        BUTTON, D_PAD, RANGE_BUTTON, STICK, TRACKPAD, SHOOTER_MODE;
+        BUTTON, D_PAD, RANGE_BUTTON, STICK, TRACKPAD, SHOOTER_MODE, WOW_GAMEPAD;
 
         public static String[] names() {
             Type[] types = values();
@@ -73,6 +73,12 @@ public class ControlElement {
         }
     }
     private final InputControlsView inputControlsView;
+    private WoWTouchGamepad wowGamepad;
+
+    public WoWTouchGamepad getWoWGamepad() {
+        if (wowGamepad == null) wowGamepad = new WoWTouchGamepad(inputControlsView);
+        return wowGamepad;
+    }
     private Type type = Type.BUTTON;
     private Shape shape = Shape.CIRCLE;
     private BindingCombo[] bindings = {BindingCombo.none(), BindingCombo.none(), BindingCombo.none(), BindingCombo.none()};
@@ -823,6 +829,7 @@ public class ControlElement {
     }
 
     public void draw(Canvas canvas) {
+        if (type == Type.WOW_GAMEPAD) { getWoWGamepad().draw(canvas); return; }
         int snappingSize = inputControlsView.getSnappingSize();
         Paint paint = inputControlsView.getPaint();
         boolean showGyroState = !inputControlsView.isEditMode()
@@ -1144,6 +1151,7 @@ public class ControlElement {
             JSONObject elementJSONObject = new JSONObject();
             elementJSONObject.put("type", type.name());
             elementJSONObject.put("shape", shape.name());
+            if (type == Type.WOW_GAMEPAD) getWoWGamepad().writeOptions(elementJSONObject);
 
             JSONArray bindingsJSONArray = new JSONArray();
             for (BindingCombo binding : bindings) bindingsJSONArray.put(binding.toJsonValue());
@@ -1259,6 +1267,7 @@ public class ControlElement {
     }
 
     public boolean handleTouchDown(int pointerId, float x, float y) {
+        if (type == Type.WOW_GAMEPAD) return getWoWGamepad().down(pointerId, x, y);
         if (currentPointerId == -1 && containsPoint(x, y)) {
             currentPointerId = pointerId;
             currentPointerActivatedButtonBindings = false;
@@ -1298,6 +1307,7 @@ public class ControlElement {
     }
 
     public boolean handleTouchMove(int pointerId, float x, float y) {
+        if (type == Type.WOW_GAMEPAD) return getWoWGamepad().move(pointerId, x, y);
         if (pointerId == currentPointerId && isRadialMenuButton()) {
             inputControlsView.handleRadialMenuTouchMove(pointerId, x, y);
             return true;
@@ -1476,6 +1486,7 @@ public class ControlElement {
     }
 
     public boolean handleTouchUp(int pointerId) {
+        if (type == Type.WOW_GAMEPAD) return getWoWGamepad().up(pointerId);
         if (pointerId == currentPointerId) {
             if (radialMenuTouchActive) {
                 radialMenuTouchActive = false;
@@ -1542,6 +1553,7 @@ public class ControlElement {
     }
 
     public boolean cancelTouch() {
+        if (type == Type.WOW_GAMEPAD) return getWoWGamepad().cancel();
         if (currentPointerId == -1) return false;
 
         if (radialMenuTouchActive || isRadialMenuButton()) {

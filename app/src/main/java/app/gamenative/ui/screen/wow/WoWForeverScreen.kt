@@ -1204,6 +1204,17 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
         container.loadData(config)
         container.saveData()
     }
+    containerManager.getContainerById(CONTAINER_ID)?.let { target ->
+        if (target.getExtra("wowTouchPresetInstalled", "0") != "1") {
+            val touchProfile = com.winlator.inputcontrols.InputControlsManager(context)
+                .getProfiles(false).firstOrNull { it.name == "WoW Mando táctil" }
+            if (touchProfile != null) {
+                target.putExtra("profileId", touchProfile.id.toString())
+                target.putExtra("wowTouchPresetInstalled", "1")
+                target.saveData()
+            }
+        }
+    }
     check(containerManager.hasContainer(CONTAINER_ID)) { "Container creation failed. Check system storage and logs." }
     return CONTAINER_ID
 }

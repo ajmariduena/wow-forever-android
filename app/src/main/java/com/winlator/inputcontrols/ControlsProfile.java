@@ -335,6 +335,10 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
                     Log.w("ControlsProfile", "Skipping element with unknown type: " + elementJSONObject.getString("type"));
                     continue;
                 }
+                if (element.getType() == ControlElement.Type.WOW_GAMEPAD) {
+                    element.getWoWGamepad().readOptions(elementJSONObject);
+                    virtualGamepad = true;
+                }
                 if (elementJSONObject.has("lookThrough")) {
                     element.setLookThroughSetting(elementJSONObject.getBoolean("lookThrough"));
                 }

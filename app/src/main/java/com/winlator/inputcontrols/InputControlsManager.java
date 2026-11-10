@@ -134,9 +134,29 @@ public class InputControlsManager {
         catch (IOException e) {}
     }
 
+    private void ensureWoWProfile() {
+        File dir = getProfilesDir(context);
+        File[] files = dir.listFiles();
+        int id = 302;
+        if (files != null) for (File file : files) {
+            ControlsProfile profile = loadProfile(context, file);
+            if (profile == null) continue;
+            if ("WoW Mando táctil".equals(profile.getName())) return;
+            id = Math.max(id, profile.id + 1);
+        }
+        try {
+            JSONObject data = new JSONObject(FileUtils.readString(context, "inputcontrols/profiles/controls-302.icp"));
+            data.put("id", id);
+            FileUtils.writeString(ControlsProfile.getProfileFile(context, id), data.toString());
+        } catch (JSONException e) {
+            Log.e("InputControlsManager", "Cannot install WoW touch profile", e);
+        }
+    }
+
     public void loadProfiles(boolean ignoreTemplates) {
         File profilesDir = InputControlsManager.getProfilesDir(context);
         copyAssetProfilesIfNeeded();
+        ensureWoWProfile();
 
         ArrayList<ControlsProfile> profiles = new ArrayList<>();
         File[] files = profilesDir.listFiles();

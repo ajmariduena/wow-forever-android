@@ -488,6 +488,7 @@ fun ElementEditorDialog(
                             // Don't allow changing shape
                             listOf(currentShape)
                         }
+                        ControlElement.Type.WOW_GAMEPAD,
                         ControlElement.Type.SHOOTER_MODE -> {
                             // Shooter Mode is always rendered as CIRCLE
                             listOf(ControlElement.Shape.CIRCLE)

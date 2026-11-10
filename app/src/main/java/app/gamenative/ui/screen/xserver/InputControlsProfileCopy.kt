@@ -44,6 +44,10 @@ private fun ControlElement.copyForView(view: InputControlsView) = ControlElement
         newElement.setBindingComboAt(i, getBindingComboAt(i))
     }
 
+    if (type == ControlElement.Type.WOW_GAMEPAD) {
+        newElement.getWoWGamepad().readOptions(toJSONObject())
+    }
+
     if (type == ControlElement.Type.SHOOTER_MODE) {
         newElement.shooterMovementType = shooterMovementType
         newElement.shooterLookType = shooterLookType

@@ -1,0 +1,23 @@
+{
+  "id": 302,
+  "name": "WoW Mando táctil",
+  "cursorSpeed": 1.0,
+  "elements": [
+    {
+      "type": "WOW_GAMEPAD",
+      "shape": "CIRCLE",
+      "toggleSwitch": false,
+      "x": 0,
+      "y": 0,
+      "scale": 1,
+      "text": "",
+      "iconId": 0,
+      "bindings": [
+        "GAMEPAD_BUTTON_A"
+      ],
+      "floatingStick": true,
+      "cameraDrag": true,
+      "cameraSensitivity": 1
+    }
+  ]
+}
