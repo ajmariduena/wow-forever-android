@@ -1250,6 +1250,8 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
     }
 }
 
+private val CAMERA_DEFAULTS = mapOf("GamePadCameraYawSpeed" to "\"3\"", "GamePadCameraPitchSpeed" to "\"2\"")
+
 private val CONFIG_DEFAULTS = linkedMapOf(
     "agentUID" to "\"$TARGET_PRODUCT\"",
     "gxApi" to "\"D3D11\"",
@@ -1280,7 +1282,7 @@ private val CONFIG_DEFAULTS = linkedMapOf(
     // Answers the first-run Screen Narrator prompt, which otherwise blocks login.txt auto-login.
     "showScreenNarrationDialog" to "\"0\"",
     "accessibilityScreenNarrationEnabled" to "\"0\"",
-)
+) + CAMERA_DEFAULTS
 
 internal fun ensureGameConfig(root: File, screenSize: String, region: GameRegion?) {
     val flavorDir = File(root, FLAVOR_DIR)
@@ -1313,9 +1315,13 @@ internal fun ensureGameConfig(root: File, screenSize: String, region: GameRegion
         RESOLUTION_KEYS.associateWith { "\"$screenSize\"" }
     val forcedLines = forced.map { (key, value) -> "SET $key $value" }
     val original = configWtf.readLines()
-    if (!original.containsAll(forcedLines)) {
+    val missingCamera = CAMERA_DEFAULTS.filterKeys { key ->
+        val setting = Regex("^\\s*SET\\s+${Regex.escape(key)}\\s+", RegexOption.IGNORE_CASE)
+        original.none { setting.containsMatchIn(it) }
+    }.map { (key, value) -> "SET $key $value" }
+    if (!original.containsAll(forcedLines) || missingCamera.isNotEmpty()) {
         val kept = original.filterNot { line -> forced.keys.any { line.startsWith("SET $it ", ignoreCase = true) } }
-        configWtf.writeText((kept + forcedLines).joinToString("\n") + "\n")
+        configWtf.writeText((kept + forcedLines + missingCamera).joinToString("\n") + "\n")
     }
 }
 

@@ -54,4 +54,35 @@ class GameConfigTest {
             configWtf(root).readLines().filter { it.contains("Resolution ") },
         )
     }
+
+    @Test fun newConfigIncludesCameraDefaults() {
+        val root = install("us")
+        ensureGameConfig(root, "1920x1080", null)
+        assertEquals(listOf("SET GamePadCameraYawSpeed \"3\"", "SET GamePadCameraPitchSpeed \"2\""),
+            configWtf(root).readLines().filter { it.startsWith("SET GamePadCamera") })
+    }
+
+    @Test fun existingConfigReceivesMissingCameraDefaultsOnlyOnce() {
+        val root = install("us", "SET portal \"US\"\n")
+        ensureGameConfig(root, "1920x1080", null)
+        val once = configWtf(root).readText()
+        ensureGameConfig(root, "1920x1080", null)
+        assertEquals(once, configWtf(root).readText())
+        assertEquals(2, configWtf(root).readLines().count { it.startsWith("SET GamePadCamera") })
+    }
+
+    @Test fun userCameraValuesSurviveIncludingCaseAndWhitespace() {
+        val saved = "  set\tgamepadcamerayawspeed\t\"1.7\""
+        val root = install("us", "$saved\nSET GamePadCameraPitchSpeed \"0.8\"\n")
+        ensureGameConfig(root, "1920x1080", null)
+        assertEquals(listOf(saved, "SET GamePadCameraPitchSpeed \"0.8\""),
+            configWtf(root).readLines().filter { it.contains("gamepadcamera", ignoreCase = true) })
+    }
+
+    @Test fun partialCameraConfigKeepsYawAndAddsPitch() {
+        val root = install("us", "SET GamePadCameraYawSpeed \"4\"\n")
+        ensureGameConfig(root, "1920x1080", null)
+        assertEquals(listOf("SET GamePadCameraYawSpeed \"4\"", "SET GamePadCameraPitchSpeed \"2\""),
+            configWtf(root).readLines().filter { it.startsWith("SET GamePadCamera") })
+    }
 }
