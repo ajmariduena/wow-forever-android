@@ -15,10 +15,9 @@ public final class WoWTouchGamepad {
     private final HashMap<String, Drawable> art = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final WoWTouchGeometry.Stick stick = new WoWTouchGeometry.Stick();
-    private final WoWTouchGeometry.TapOrDrag cameraGesture = new WoWTouchGeometry.TapOrDrag();
-    private boolean cameraTapInGame;
-    private int movementPointer = -1, cameraPointer = -1;
-    private float cameraX, cameraY, restX, restY, stickSize, zoneRight, zoneTop;
+    private final WoWPointerGestures pointerGestures;
+    private int movementPointer = -1;
+    private float restX, restY, stickSize, zoneRight, zoneTop;
     private int width, height, hingeTop = -1, hingeBottom = -1;
     private boolean floatingStick = true, cameraDrag = true;
     private float cameraSensitivity = 1;
@@ -33,7 +32,7 @@ public final class WoWTouchGamepad {
         }
         boolean hit(float px, float py) { return Math.hypot(px-x, py-y) <= size/2; }
     }
-    public WoWTouchGamepad(InputControlsView view) { this.view = view; }
+    public WoWTouchGamepad(InputControlsView view) { this.view = view; pointerGestures = new WoWPointerGestures(view); }
     public boolean isFloatingStick() { return floatingStick; }
     public boolean isCameraDrag() { return cameraDrag; }
     public float getCameraSensitivity() { return cameraSensitivity; }
@@ -51,7 +50,7 @@ public final class WoWTouchGamepad {
     }
     public void setPanelBounds(int top, int bottom) {
         if (hingeTop == top && hingeBottom == bottom) return;
-        cancel(); hingeTop = top; hingeBottom = bottom; width = 0; view.invalidate();
+        cancel(); hingeTop = top; hingeBottom = bottom; pointerGestures.setGameBottom(top); width = 0; view.invalidate();
     }
     private void layout() {
         int w = view.getWidth(), h = view.getHeight();
@@ -88,6 +87,11 @@ public final class WoWTouchGamepad {
             int index = 8+(i-4)*2;
             add(w*values[index]/100,py(values[index+1],flex,panelTop,panelScale),small,labels[i],null,bindings[i]);
         }
+        float[] extras = cover ? new float[]{25,36,94,44,68,10}
+            : flex ? new float[]{28,67,94,69,71,58} : new float[]{27,60,94,58,70,6};
+        add(w*extras[0]/100,py(extras[1],flex,panelTop,panelScale),small,"L3",null,Binding.GAMEPAD_BUTTON_L3);
+        add(w*extras[2]/100,py(extras[3],flex,panelTop,panelScale),small,"R3",null,Binding.GAMEPAD_BUTTON_R3);
+        add(w*extras[4]/100,py(extras[5],flex,panelTop,panelScale),small,"MOUSE",null,Binding.NONE);
     }
     private float py(float percent, boolean flex, float top, float scale) {
         return flex ? top+(percent-50)*height/100*scale : percent*height/100;
@@ -107,9 +111,10 @@ public final class WoWTouchGamepad {
         layout();
         if (hingeTop >= 0) { paint.setColor(0xff120d08); canvas.drawRect(0,hingeTop,width,height,paint); }
         for (Button b:buttons) {
-            String state = b.pointer < 0 ? "normal" : "pressed";
+            String state = (b.pointer >= 0 || (b.label.equals("MOUSE") && view.isWoWMouseMode())) ? "pressed" : "normal";
             if (b.gem != null) image(canvas,"gem-"+b.gem+"-"+state,b.x,b.y,b.size*.76f,255);
             image(canvas,"frame-"+(b.gem == null?"menu":"ability")+"-"+state,b.x,b.y,b.size,255);
+            if (b.label.equals("MOUSE")) { image(canvas,"mouse",b.x,b.y,b.size*.4f,255); continue; }
             if (b.binding == Binding.SHOW_KEYBOARD) { image(canvas,"keyboard",b.x,b.y,b.size*.4f,255); continue; }
             paint.setColor(b.gem == null ? 0xfff0dca6 : 0xfffff7e0);
             paint.setTypeface(Typeface.create(b.gem == null ? "sans-serif" : "serif",Typeface.BOLD));
@@ -122,35 +127,32 @@ public final class WoWTouchGamepad {
         image(canvas,"frame-joystick-base-normal",sx,sy,stickSize,alpha);
         image(canvas,"frame-joystick-knob-normal",sx+stick.x*stickSize*.3f,sy+stick.y*stickSize*.3f,stickSize*.44f,alpha);
     }
+    RectF buttonBounds(Binding binding) {
+        layout();
+        for (Button b : buttons) if (b.binding == binding) return new RectF(b.x-b.size/2,b.y-b.size/2,b.x+b.size/2,b.y+b.size/2);
+        return null;
+    }
     public boolean down(int id,float x,float y) {
         layout();
         for (Button b:buttons) if (b.hit(x,y)) {
+            if (b.label.equals("MOUSE")) { view.setWoWMouseMode(!view.isWoWMouseMode()); return true; }
             if (b.pointer < 0) { b.pointer=id; view.handleInputEvent(b.binding,true); view.invalidate(); }
             return true;
         }
-        if (x <= zoneRight && y >= zoneTop) {
+        boolean inGame = (hingeTop < 0 || y < hingeTop) && view.isWoWGamePoint(x, y);
+        if (x <= zoneRight && y >= zoneTop && !(view.isWoWMouseMode() && inGame)) {
             if (movementPointer < 0) { movementPointer=id; stick.begin(floatingStick?x:restX,floatingStick?y:restY); view.invalidate(); }
             return true;
         }
-        if (cameraPointer < 0 && !(hingeTop >= 0 && y >= hingeTop && y < hingeBottom)) {
-            cameraPointer=id; cameraX=x; cameraY=y;
-            cameraTapInGame = hingeTop < 0 || y < hingeTop;
-            cameraGesture.begin(x, y, android.os.SystemClock.uptimeMillis(), 4 * view.getResources().getDisplayMetrics().density);
-        }
-        return true;
+        if (hingeTop >= 0 && y >= hingeTop && y < hingeBottom) return true;
+        return pointerGestures.down(id, x, y, inGame, cameraDrag, cameraSensitivity);
     }
     public boolean move(int id,float x,float y) {
         if (id == movementPointer) {
             stick.move(x,y,stickSize*.3f); axis(false,stick.x,stick.y); view.invalidate(); return true;
         }
-        if (id == cameraPointer) {
-            if (cameraGesture.move(x, y) && cameraDrag) {
-                axis(true,WoWTouchGeometry.camera((x-cameraX)*cameraSensitivity,height*.04f),WoWTouchGeometry.camera((y-cameraY)*cameraSensitivity,height*.04f));
-            }
-            cameraX=x; cameraY=y; return true;
-        }
         for (Button b:buttons) if (b.pointer == id) return true;
-        return false;
+        return pointerGestures.move(id,x,y);
     }
     private void axis(boolean right,float x,float y) {
         view.handleInputEvent(right?Binding.GAMEPAD_RIGHT_THUMB_RIGHT:Binding.GAMEPAD_LEFT_THUMB_RIGHT,true,x);
@@ -159,23 +161,14 @@ public final class WoWTouchGamepad {
     public boolean up(int id) {
         boolean handled=false;
         if (id == movementPointer && id >= 0) { movementPointer=-1; stick.release(); axis(false,0,0); handled=true; }
-        if (id == cameraPointer && id >= 0) {
-            cameraPointer=-1;
-            if (cameraGesture.isDragging() && cameraDrag) axis(true,0,0);
-            if (cameraTapInGame && (hingeTop < 0 || cameraY < hingeTop) && cameraGesture.isTap(android.os.SystemClock.uptimeMillis())) {
-                view.performWoWGameClick(cameraGesture.startX, cameraGesture.startY);
-            }
-            cameraGesture.cancel();
-            handled=true;
-        }
         for (Button b:buttons) if (b.pointer == id && id >= 0) { b.pointer=-1; view.handleInputEvent(b.binding,false); handled=true; }
+        if (pointerGestures.up(id)) handled = true;
         view.invalidate(); return handled;
     }
     public boolean cancel() {
-        boolean active = movementPointer >= 0 || cameraPointer >= 0;
-        if (cameraGesture.isDragging() && cameraDrag) axis(true,0,0);
-        cameraGesture.cancel();
-        up(movementPointer); up(cameraPointer);
+        boolean active = movementPointer >= 0;
+        if (pointerGestures.cancel()) active = true;
+        up(movementPointer);
         for (Button b:buttons) if (b.pointer >= 0) { up(b.pointer); active=true; }
         return active;
     }

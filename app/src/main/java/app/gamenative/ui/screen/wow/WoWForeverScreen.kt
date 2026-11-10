@@ -1225,6 +1225,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
     return JSONObject().apply {
         put("id", CONTAINER_ID)
         put("name", "WoW Forever")
+        put("shooterMode", false)
         put("screenSize", screenSize)
         put("envVars", envVars)
         put("graphicsDriver", "Wrapper")

@@ -66,6 +66,7 @@ class WoWTouchTapTest {
         assertNull(WoWTouchGeometry.gamePoint(0f, 0f, 0, 0, 800, 600, 0, 600, 0))
     }
     private fun view(): InputControlsView = mock<InputControlsView>().apply {
+        whenever(isWoWGamePoint(any(), any())).thenReturn(true)
         whenever(width).thenReturn(2100)
         whenever(height).thenReturn(900)
         whenever(resources).thenReturn(RuntimeEnvironment.getApplication().resources)
@@ -83,7 +84,7 @@ class WoWTouchTapTest {
         val view = view()
         val pad = WoWTouchGamepad(view)
         pad.down(1, 1000f, 450f)
-        pad.move(1, 1100f, 450f)
+        pad.move(1, 1200f, 450f)
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
         pad.cancel()
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)

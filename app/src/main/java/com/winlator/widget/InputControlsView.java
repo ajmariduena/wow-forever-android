@@ -74,6 +74,20 @@ public class InputControlsView extends View {
     private float offsetY;
     private ControlElement selectedElement;
     private ControlsProfile profile;
+    private boolean wowMouseMode;
+    public boolean isWoWMouseMode() { return wowMouseMode; }
+    public void setWoWMouseMode(boolean enabled) {
+        cancelTouchRouting(); wowMouseMode = enabled; invalidate();
+    }
+
+    public boolean isWoWGamepadProfileActive() {
+        if (profile == null) return false;
+        for (ControlElement element : profile.getElements()) {
+            if (element.getType() == ControlElement.Type.WOW_GAMEPAD) return true;
+        }
+        return false;
+    }
+
     private int wowHingeTop = -1, wowHingeBottom = -1;
 
     public void setWoWPanelBounds(int top, int bottom) {
@@ -267,7 +281,7 @@ public class InputControlsView extends View {
         }
 
         if (profile != null) {
-            if (!profile.isElementsLoaded()) profile.loadElements(this);
+            if (!profile.isElementsLoaded()) { profile.loadElements(this); applyShooterMouseInputMode(); }
             if (showTouchscreenControls) {
                 for (ControlElement element : profile.getElements()) {
                     // Hide STICK elements replaced by container shooter mode
@@ -279,7 +293,7 @@ public class InputControlsView extends View {
         }
 
         // Draw dynamic joysticks when shooter mode is active
-        boolean anyShooterActive = shooterModeActive || containerShooterModeRuntime;
+        boolean anyShooterActive = !isWoWGamepadProfileActive() && (shooterModeActive || containerShooterModeRuntime);
         if (anyShooterActive && joystickPointerId != -1) {
             drawShooterJoystick(canvas);
         }
@@ -290,7 +304,7 @@ public class InputControlsView extends View {
         }
 
         // Draw container shooter mode toggle button
-        if (containerShooterMode && isRuntimeToggleVisible() && !editMode) {
+        if (!isWoWGamepadProfileActive() && containerShooterMode && isRuntimeToggleVisible() && !editMode) {
             drawContainerShooterToggle(canvas);
         }
 
@@ -431,6 +445,7 @@ public class InputControlsView extends View {
         }
 
         onControlsProfileContentChanged(profileChanged);
+        applyShooterMouseInputMode();
         gyroController.setHasProfile(profile != null);
     }
 
@@ -546,10 +561,10 @@ public class InputControlsView extends View {
         this.touchpadView = touchpadView;
     }
 
-    public void performWoWGameClick(float x, float y) {
-        if (xServer == null || xServer.getRenderer() == null) return;
+    private float[] mapWoWGamePoint(float x, float y) {
+        if (xServer == null || xServer.getRenderer() == null) return null;
         com.winlator.renderer.XServerRenderer renderer = xServer.getRenderer();
-        if (!(renderer.getRendererView() instanceof View)) return;
+        if (!(renderer.getRendererView() instanceof View)) return null;
         View surface = (View)renderer.getRendererView();
         int[] surfaceLocation = new int[2], overlayLocation = new int[2];
         surface.getLocationInWindow(surfaceLocation);
@@ -561,10 +576,40 @@ public class InputControlsView extends View {
         float[] point = com.winlator.inputcontrols.WoWTouchGeometry.gamePoint(x, y,
                 surfaceLocation[0] - overlayLocation[0], surfaceLocation[1] - overlayLocation[1],
                 surface.getWidth(), surface.getHeight(), xServer.screenInfo.width, xServer.screenInfo.height, scalingMode);
-        if (point == null) return;
+        return point;
+    }
+
+    public boolean isWoWGamePoint(float x, float y) { return mapWoWGamePoint(x, y) != null; }
+
+    public boolean moveWoWPointer(float x, float y) {
+        float[] point = mapWoWGamePoint(x, y);
+        if (point == null) return false;
         xServer.injectPointerMove((int)point[0], (int)point[1]);
-        xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
-        xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+        return true;
+    }
+
+    public void setWoWMouseButton(boolean right, boolean down) {
+        if (xServer == null) return;
+        Pointer.Button button = right ? Pointer.Button.BUTTON_RIGHT : Pointer.Button.BUTTON_LEFT;
+        if (down) xServer.injectPointerButtonPress(button);
+        else xServer.injectPointerButtonRelease(button);
+    }
+
+    public void performWoWGameClick(float x, float y) { clickWoWPointer(x, y, false); }
+
+    public void clickWoWPointer(float x, float y, boolean right) {
+        if (!moveWoWPointer(x, y)) return;
+        setWoWMouseButton(right, true);
+        setWoWMouseButton(right, false);
+    }
+
+    public void scrollWoWPointer(float x, float y, int steps) {
+        if (steps == 0 || !moveWoWPointer(x, y)) return;
+        Pointer.Button button = steps > 0 ? Pointer.Button.BUTTON_SCROLL_UP : Pointer.Button.BUTTON_SCROLL_DOWN;
+        for (int i = 0; i < Math.abs(steps); i++) {
+            xServer.injectPointerButtonPress(button);
+            xServer.injectPointerButtonRelease(button);
+        }
     }
 
     public XServer getXServer() {
@@ -679,6 +724,7 @@ public class InputControlsView extends View {
 
     private void applyShooterMouseInputMode() {
         if (xServer == null || shooterModeConfig == null) return;
+        if (isWoWGamepadProfileActive()) { xServer.setRelativeMouseMovement(false); return; }
         boolean useWin32RelativeInput =
                 (shooterModeActive || containerShooterModeRuntime)
                         && ShooterModeConfig.LOOK_MOUSE.equals(getResolvedShooterLookType())
@@ -1258,6 +1304,7 @@ public class InputControlsView extends View {
     }
 
     private boolean handleShooterTouchDown(int pointerId, float x, float y, boolean allowButtonLookThrough) {
+        if (isWoWGamepadProfileActive()) return false;
         boolean handled = false;
 
         // Check container shooter mode toggle button first
@@ -1514,7 +1561,7 @@ public class InputControlsView extends View {
                         float y = event.getY(i);
 
                         // Shooter mode intercept per pointer
-                        if (shooterModeActive || containerShooterModeRuntime) {
+                        if (!isWoWGamepadProfileActive() && (shooterModeActive || containerShooterModeRuntime)) {
                             int pid = event.getPointerId(i);
                             if (handleShooterTouchMovePointer(pid, x, y)) continue;
                             // Non-intercepted pointer in shooter mode: try elements with correct ID
@@ -1556,7 +1603,7 @@ public class InputControlsView extends View {
                         break;
                     }
                     // Shooter mode intercept
-                    if (shooterModeActive || containerShooterModeRuntime) {
+                    if (!isWoWGamepadProfileActive() && (shooterModeActive || containerShooterModeRuntime)) {
                         if (pendingButtonLooks.get(pointerId) != null) {
                             releasePendingButtonLook(pointerId);
                             handled = true;

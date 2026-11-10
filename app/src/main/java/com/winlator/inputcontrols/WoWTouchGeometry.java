@@ -59,8 +59,31 @@ public final class WoWTouchGeometry {
         public void release() { x = y = 0; }
     }
 
-    public static float camera(float delta, float radius) {
-        return Math.max(-1, Math.min(1, delta / Math.max(1, radius)));
+    public static final class Wheel {
+        private float lastY, remainder;
+        private boolean active;
+        public static boolean eligible(int count, boolean firstInGame, boolean secondInGame) {
+            return count == 2 && firstInGame && secondInGame;
+        }
+        public void begin(float midpointY) { lastY = midpointY; remainder = 0; active = true; }
+        public int move(float midpointY, float stepSize) {
+            if (!active || stepSize <= 0) return 0;
+            remainder += midpointY - lastY; lastY = midpointY;
+            int steps = (int)(remainder / stepSize);
+            remainder -= steps * stepSize;
+            return steps;
+        }
+        public void reset() { active = false; remainder = 0; }
+        public boolean isActive() { return active; }
     }
+
+    public static float[] rightStick(float x, float y, float originX, float originY, float radius) {
+        float dx = (x - originX) / Math.max(1, radius), dy = (y - originY) / Math.max(1, radius);
+        float distance = (float)Math.hypot(dx, dy);
+        if (distance <= .08f) return new float[]{0, 0};
+        float length = Math.min(1, (distance - .08f) / .92f);
+        return new float[]{dx / distance * length, dy / distance * length};
+    }
+
     private WoWTouchGeometry() {}
 }

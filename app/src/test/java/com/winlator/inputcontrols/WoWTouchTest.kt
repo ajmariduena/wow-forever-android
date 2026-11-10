@@ -27,11 +27,13 @@ class WoWTouchTest {
         assertEquals(50f, stick.originX, 0f)
         assertEquals(0f, stick.y, 0f)
     }
-    @Test fun cameraDeltaPreservesDirectionAndClamps() {
-        assertEquals(.5f, WoWTouchGeometry.camera(10f, 20f), 0f)
-        assertEquals(-1f, WoWTouchGeometry.camera(-50f, 20f), 0f)
-        assertEquals(1f, WoWTouchGeometry.camera(50f, 20f), 0f)
-        assertEquals(0f, WoWTouchGeometry.camera(0f, 20f), 0f)
+    @Test fun rightStickOriginCanFloatWithoutChangingDeflection() {
+        val first = WoWTouchGeometry.rightStick(140f, 80f, 100f, 100f, 100f)
+        val translated = WoWTouchGeometry.rightStick(540f, 380f, 500f, 400f, 100f)
+        assertArrayEquals(first, translated, .0001f)
+        assertTrue(first[0] > 0)
+        assertTrue(first[1] < 0)
+        assertTrue(Math.hypot(first[0].toDouble(), first[1].toDouble()) < 1)
     }
     @Test fun coverOpenAndFlexSelection() {
         assertEquals(WoWTouchGeometry.Layout.COVER, WoWTouchGeometry.layout(2100f, 900f, false, false))
@@ -41,6 +43,7 @@ class WoWTouchTest {
     }
     private fun view(): InputControlsView = mock<InputControlsView>().apply {
         whenever(resources).thenReturn(RuntimeEnvironment.getApplication().resources)
+        whenever(isWoWGamePoint(any(), any())).thenReturn(true)
         whenever(width).thenReturn(2100)
         whenever(height).thenReturn(900)
         whenever(maxWidth).thenReturn(2100)
@@ -93,7 +96,7 @@ class WoWTouchTest {
         val pad = WoWTouchGamepad(view)
         pad.down(1, 200f, 500f)
         pad.down(2, 1000f, 450f)
-        pad.move(2, 1050f, 450f)
+        pad.move(2, 1200f, 450f)
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
         pad.up(2)
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)
