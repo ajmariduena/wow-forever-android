@@ -348,6 +348,7 @@ private fun updatePortraitGameHostHeight(
     screenWidth: Int,
     screenSize: String,
 ) {
+    if (gameHost.getTag(app.gamenative.R.id.wow_flex_height) != null) return
     val params = gameHost.layoutParams ?: return
     val host = gameHost.parent as? View
     val topInset = if (isPortrait && host != null) portraitCutoutTopInset(host, belowCutout) else 0
@@ -2534,6 +2535,11 @@ fun XServerScreen(
                 PluviaApp.touchpadView?.setTouchscreenMouseDisabled(true);
             }
 
+            if (container.name == "WoW Forever" && activity != null) {
+                WoWFlexController.install(activity, mainRoot, gameHost, icView) {
+                    updatePortraitGameHostHeight(gameHost, isPortrait, container.isPortraitBelowCutout, screenWidth, container.screenSize)
+                }
+            }
             mainRoot
 
             // } else {

@@ -74,6 +74,14 @@ public class InputControlsView extends View {
     private float offsetY;
     private ControlElement selectedElement;
     private ControlsProfile profile;
+    private int wowHingeTop = -1, wowHingeBottom = -1;
+
+    public void setWoWHinge(int top, int bottom) {
+        if (wowHingeTop == top && wowHingeBottom == bottom) return;
+        cancelTouchRouting();
+        wowHingeTop = top; wowHingeBottom = bottom;
+        invalidate();
+    }
     // Retained while the overlay controls are hidden so gyro can keep targeting the active gamepad.
     private ControlsProfile gyroProfile;
     private float overlayOpacity = DEFAULT_OVERLAY_OPACITY;
@@ -234,7 +242,7 @@ public class InputControlsView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (profile != null && profile.isElementsLoaded() && oldw > 0 && w != oldw) {
+        if (profile != null && profile.isElementsLoaded() && oldw > 0 && (w != oldw || h != oldh)) {
             cancelTouchRouting();
             profile.loadElements(this);
         }
@@ -264,6 +272,7 @@ public class InputControlsView extends View {
                 for (ControlElement element : profile.getElements()) {
                     // Hide STICK elements replaced by container shooter mode
                     if (isStickHiddenByShooterMode(element)) continue;
+                    if (element.getType() == ControlElement.Type.WOW_GAMEPAD) element.getWoWGamepad().setHinge(wowHingeTop, wowHingeBottom);
                     element.draw(canvas);
                 }
             }

@@ -180,6 +180,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.window:window:1.4.0")
     implementation(libs.okhttp)
 
     // Winlator
