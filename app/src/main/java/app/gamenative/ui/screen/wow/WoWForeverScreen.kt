@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -101,6 +102,7 @@ fun WoWForeverScreen(
     var launchJob by remember { mutableStateOf<Job?>(null) }
     var hasSavedLogin by remember { mutableStateOf(BattleNetSignIn.load(context) != null) }
     var region by remember(gamePath, files) { mutableStateOf(GameRegion.current(context, gamePath)) }
+    var driverVariant by remember { mutableStateOf(WoWGraphicsDriver.current(context)) }
     var resolution by remember { mutableStateOf(RenderResolution.current(context, gpu.screenSize)) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
@@ -212,7 +214,7 @@ fun WoWForeverScreen(
             try {
                 val screenSize = fitScreenSizeToWindow(context, resolution.size)
                 val containerId = withContext(Dispatchers.IO) {
-                    prepareLaunch(context, File(gamePath), gpu, screenSize) { msg ->
+                    prepareLaunch(context, File(gamePath), gpu.withDriver(driverVariant), screenSize) { msg ->
                         scope.launch(Dispatchers.Main) { statusText = msg }
                     }
                 }
@@ -470,6 +472,12 @@ fun WoWForeverScreen(
                     Text(text = "Target Path: $gamePath", fontSize = 11.sp, color = WowSubtle, maxLines = 2)
 
                     FlowRow(modifier = Modifier.fillMaxWidth()) {
+                        if (gpu.isAdreno8xx) {
+                            OptionMenu("Driver gráfico: ${driverVariant.label}", Icons.Default.Settings, WoWGraphicsDriver.entries, driverVariant, { it.label }, !isLaunching) {
+                                WoWGraphicsDriver.save(context, it)
+                                driverVariant = it
+                            }
+                        }
                         OptionMenu("Region: ${region.label}", Icons.Default.Public, GameRegion.entries, region, { it.label }, !isLaunching) {
                             GameRegion.save(context, it)
                             region = it
@@ -911,9 +919,25 @@ enum class GameRegion(val label: String) {
     }
 }
 
+/** Stable preference names: the baseline remains the default, including for unknown saved values. */
+enum class WoWGraphicsDriver(val driver: String, val tuDebug: String, val label: String) {
+    V32_SYSMEM("Turnip-V32-RP6sched", "noconform,sysmem", "V32 + sysmem (actual)"),
+    V32_GMEM("Turnip-V32-RP6sched", "noconform", "V32 sin sysmem"),
+    V39_GMEM("Turnip-Gen8-V39", "noconform", "V39 sin sysmem (experimental)"),
+    V39_SYSMEM("Turnip-Gen8-V39", "noconform,sysmem", "V39 + sysmem (experimental)");
+
+    companion object {
+        internal fun fromSaved(value: String?) = entries.firstOrNull { it.name == value } ?: V32_SYSMEM
+        fun current(context: Context) = fromSaved(prefs(context).getString("graphics_driver", null))
+        fun save(context: Context, driver: WoWGraphicsDriver) {
+            prefs(context).edit().putString("graphics_driver", driver.name).apply()
+        }
+    }
+}
+
 /** The 16:9 render budget, before it's reshaped to the window's aspect ratio. Defaults to the GPU profile's size. */
 enum class RenderResolution(val size: String, val label: String) {
-    HD("1280x720", "720p"), FULL_HD("1920x1080", "1080p");
+    HD("1280x720", "720p"), HD_PLUS("1600x900", "900p"), FULL_HD("1920x1080", "1080p");
 
     companion object {
         private const val KEY_RESOLUTION = "resolution"
@@ -1127,6 +1151,11 @@ private const val PROTON_VERSION = "proton-11.0-90624-arm64ec"
 private const val DXVK_VERSION = "2.4.1-wow-aarch64-test"
 
 private data class GpuProfile(val driver: String, val tuDebug: String, val screenSize: String, val label: String, val edition: String) {
+    val isAdreno8xx get() = label == "Adreno 8xx"
+
+    fun withDriver(variant: WoWGraphicsDriver) =
+        if (isAdreno8xx) copy(driver = variant.driver, tuDebug = variant.tuDebug) else this
+
     companion object {
         fun detect(context: Context) = if (isAdreno8xxDevice(context)) {
             GpuProfile(ADRENO_8XX_DRIVER, "noconform,sysmem", "1280x720", "Adreno 8xx", "Snapdragon 8 Elite / Adreno 8xx")
@@ -1170,6 +1199,9 @@ internal fun fitScreenSize(baseSize: String, windowWidth: Int, windowHeight: Int
 
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, screenSize: String, onStatus: (String) -> Unit): String {
     installBundledComponents(context, onStatus)
+    if (gpu.driver == "Turnip-Gen8-V39") {
+        installDriver(context, gpu.driver, "Turnip_Gen8_V39.zip", onStatus)
+    }
 
     check(File(gameRoot, BUILD_INFO).exists()) { "Missing $BUILD_INFO in $gameRoot. Copy it from your WoW install." }
     try {
@@ -1256,6 +1288,7 @@ private val CONFIG_DEFAULTS = linkedMapOf(
     "textLocale" to "\"enUS\"",
     "audioLocale" to "\"enUS\"",
     "gxMaximize" to "\"1\"",
+    "vsync" to "\"0\"",
     "graphicsQuality" to "\"0\"",
     "ResampleQuality" to "\"0\"",
     "RenderScale" to "\"1\"",
@@ -1289,8 +1322,8 @@ internal fun ensureGameConfig(root: File, screenSize: String, region: GameRegion
     if (!flavorInfo.exists()) {
         flavorInfo.writeText("Product Flavor!STRING:0\n$TARGET_PRODUCT\n")
     }
-    // Handheld defaults are only written on first boot so in-game changes stick, with three exceptions that are
-    // forced on every launch. gxApi: DXVK only works with D3D11, and a config copied from a Mac would otherwise
+    // Handheld defaults are only written on first boot so in-game changes stick, with the launcher-owned values below
+    // enforced on every launch. gxApi: DXVK only works with D3D11, and a config copied from a Mac would otherwise
     // select Metal. Resolutions match the container, which the launcher sizes: WoW's "auto" picks a 720p size
     // because it sees a low-end Intel GPU via Wine, and saves that size on exit as if the player chose it.
     // The portal is the region picked in the launcher, or kept as is (filled from the install's region when
@@ -1309,10 +1342,17 @@ internal fun ensureGameConfig(root: File, screenSize: String, region: GameRegion
         configWtf.writeText(CONFIG_DEFAULTS.entries.joinToString("\n") { "SET ${it.key} ${it.value}" } + "\n")
     }
 
-    val forced = mapOf("gxApi" to CONFIG_DEFAULTS.getValue("gxApi"), "portal" to "\"${region?.name ?: portalOf(root)}\"") +
+    // Cap imported viewing distances, preserving lower user values. Do not rewrite other quality settings.
+    val original = configWtf.readLines()
+    val distanceKeys = listOf("farclip", "horizonClip", "RAIDfarclip", "RAIDhorizonClip")
+    val distanceCaps = distanceKeys.filter { key ->
+        val values = original.filter { it.startsWith("SET $key ", ignoreCase = true) }
+            .mapNotNull { it.substringAfter(' ').substringAfter(' ').trim().trim('"').toDoubleOrNull() }
+        values.isEmpty() || values.any { it > 1200 }
+    }.associateWith { "\"1200\"" }
+    val forced = distanceCaps + mapOf("gxApi" to CONFIG_DEFAULTS.getValue("gxApi"), "portal" to "\"${region?.name ?: portalOf(root)}\"") +
         RESOLUTION_KEYS.associateWith { "\"$screenSize\"" }
     val forcedLines = forced.map { (key, value) -> "SET $key $value" }
-    val original = configWtf.readLines()
     if (!original.containsAll(forcedLines)) {
         val kept = original.filterNot { line -> forced.keys.any { line.startsWith("SET $it ", ignoreCase = true) } }
         configWtf.writeText((kept + forcedLines).joinToString("\n") + "\n")
@@ -1360,7 +1400,7 @@ private fun installDriver(context: Context, driverName: String, assetZip: String
     onStatus("Installing $driverName driver...")
     driverDir.mkdirs()
     if (!FileUtils.extractZipFromAssets(context, "bundled_components/$assetZip", driverDir)) {
-        Timber.e("Error extracting driver $driverName from $assetZip")
+        error("Error extracting driver $driverName from $assetZip")
     }
 }
 
