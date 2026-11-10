@@ -117,6 +117,7 @@ object QuickMenuAction {
     const val DISABLE_MOUSE = 8
     const val SHOOTER_MODE = 9
     const val RADIAL_MENU = 10
+    const val RETRY_WOW_LOGIN = 12
     const val GYRO = 11
 }
 
@@ -349,7 +350,18 @@ fun QuickMenu(
     // dex verifier's register limit and extra locals can produce invalid bytecode.
     val gyroMenu = remember(container?.id) { container?.let(::GyroQuickMenuState) }
 
+    val retryLoginAvailable = app.gamenative.ui.screen.wow.WoWRetryLogin.available(
+        container, androidx.compose.ui.platform.LocalContext.current,
+    )
     val controllerItems = buildList {
+        if (retryLoginAvailable) add(
+            QuickMenuItem(
+                id = QuickMenuAction.RETRY_WOW_LOGIN,
+                icon = Icons.Default.Keyboard,
+                labelResId = R.string.wow_retry_login,
+                accentColor = PluviaTheme.colors.accentPurple,
+            ),
+        )
         add(
             QuickMenuItem(
                 id = QuickMenuAction.DISABLE_MOUSE,

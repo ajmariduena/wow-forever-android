@@ -1145,6 +1145,12 @@ fun XServerScreen(
 
     val onQuickMenuItemSelected: (Int) -> Boolean = { itemId ->
         when (itemId) {
+            QuickMenuAction.RETRY_WOW_LOGIN -> {
+                if (app.gamenative.ui.screen.wow.WoWRetryLogin.available(container, context)) {
+                    app.gamenative.ui.screen.wow.WoWRetryLogin.requested.value = true
+                }
+                true
+            }
             QuickMenuAction.KEYBOARD -> {
                 keyboardRequestedFromOverlay = true
                 showSoftKeyboard(view, "onscreen_keyboard_enabled")
@@ -2701,6 +2707,8 @@ fun XServerScreen(
                 }
             )
         }
+
+        app.gamenative.ui.screen.wow.WoWRetryLoginHost(container)
 
         QuickMenu(
             isVisible = showQuickMenu,

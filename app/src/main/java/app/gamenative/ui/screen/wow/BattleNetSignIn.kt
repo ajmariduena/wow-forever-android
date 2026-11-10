@@ -33,7 +33,16 @@ import timber.log.Timber
 import java.io.File
 
 object BattleNetSignIn {
-    data class Login(val email: String, val password: String)
+    data class Login(val email: String, val password: String) {
+        override fun toString() = "Login(redacted)"
+    }
+
+    fun hasSavedLogin(context: Context): Boolean =
+        !prefs(context).getString(KEY_EMAIL, null).isNullOrBlank() &&
+            !prefs(context).getString(KEY_PASSWORD, null).isNullOrBlank()
+
+    internal fun shouldRemoveLoginFile(elapsedMs: Long, hotfixBytes: Long): Boolean =
+        elapsedMs >= 600_000L || hotfixBytes > 50_000L
 
     fun load(context: Context): Login? {
         val prefs = prefs(context)
@@ -87,15 +96,17 @@ object BattleNetSignIn {
             val hotfixLog = File(File(gameRoot, WowClientDownloader.FLAVOR_DIR), "Logs/Hotfix.log")
             hotfixLog.delete()
             // A fresh install's first boot streams assets and plays the intro cinematic before reaching the login screen.
-            val deadline = System.currentTimeMillis() + 600_000L
-            while (isActive && System.currentTimeMillis() < deadline) {
-                delay(1000L)
-                if (hotfixLog.exists() && hotfixLog.length() > 50_000L) {
-                    removeLoginFile(gameRoot)
-                    return@launch
+            val started = android.os.SystemClock.elapsedRealtime()
+            try {
+                while (isActive) {
+                    delay(1000L)
+                    if (shouldRemoveLoginFile(android.os.SystemClock.elapsedRealtime() - started, hotfixLog.length())) {
+                        return@launch
+                    }
                 }
+            } finally {
+                removeLoginFile(gameRoot)
             }
-            removeLoginFile(gameRoot)
         }
     }
 
