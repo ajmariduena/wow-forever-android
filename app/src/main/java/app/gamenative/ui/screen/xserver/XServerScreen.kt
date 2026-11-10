@@ -404,7 +404,6 @@ fun XServerScreen(
     lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current,
     appId: String,
     isOffline: Boolean = false,
-    registerBackAction: ( ( ) -> Unit ) -> Unit,
     navigateBack: () -> Unit,
     onExit: (onComplete: (() -> Unit)?) -> Unit,
     onWindowMapped: ((Context, Window) -> Unit)? = null,
@@ -1381,8 +1380,6 @@ fun XServerScreen(
             return@gameBack
         }
 
-        Timber.i("BackHandler")
-
         val controllerManager = ControllerManager.getInstance()
         controllerManager.scanForDevices()
         hasPhysicalController = controllerManager.getDetectedDevices().isNotEmpty()
@@ -1433,20 +1430,16 @@ fun XServerScreen(
         }
     }
 
-    // Modern only: API 33+ routes gesture-back through OnBackInvokedDispatcher,
-    // which no longer delivers KEYCODE_BACK to MainActivity.dispatchKeyEvent.
-    // BackHandler registers with OnBackPressedDispatcher to catch that path.
-    // Legacy flavor (targetSdk 28) still receives BACK as a KeyEvent, so it keeps
-    // master's event-bus route via registerBackAction(gameBack) below.
-    BackHandler(enabled = BuildConfig.MODERN_ANDROID) { gameBack() }
+    BackHandler {
+        Timber.d("Back source=dispatcher action=commit menu=$showQuickMenu")
+        gameBack()
+    }
 
     DisposableEffect(container) {
-        registerBackAction(gameBack)
         if (isLsfgAvailable) {
             LsfgVkManager.startVsyncClock(context, container)
         }
         onDispose {
-            Timber.d("XServerScreen leaving, clearing back action")
             LsfgVkManager.stopVsyncClock()
             removePerformanceHud()
             performanceHudHost = null
@@ -1457,7 +1450,6 @@ fun XServerScreen(
             } else if (!manualResumeMode) {
                 PluviaApp.isOverlayPaused = false
             }
-            registerBackAction { }
         }   // preserve suspend state across activity recreation while a game is still running
     }
 
@@ -1466,7 +1458,11 @@ fun XServerScreen(
         Timber.i("onActivityDestroyed")
         exit(xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "activity_destroyed")
     }
-    val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = {
+    val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = onKeyEvent@{
+        if (it.event.keyCode == KeyEvent.KEYCODE_BACK) {
+            Timber.d("Back source=key action=${it.event.action} repeat=${it.event.repeatCount} menu=$showQuickMenu")
+            return@onKeyEvent false
+        }
         val isKeyboard = Keyboard.isKeyboardDevice(it.event.device)
         val isPhysicalKeyboard = isKeyboard && it.event.device?.isVirtual != true
         val isGamepad = ExternalController.isGameController(it.event.device)

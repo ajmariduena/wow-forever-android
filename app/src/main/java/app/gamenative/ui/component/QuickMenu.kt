@@ -2,7 +2,6 @@ package app.gamenative.ui.component
 
 import android.view.KeyEvent
 import timber.log.Timber
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -477,10 +476,6 @@ fun QuickMenu(
         if (visibleState.isIdle) {
             onAnimationComplete(visibleState.currentState)
         }
-    }
-
-    BackHandler(enabled = isVisible) {
-        onDismiss()
     }
 
     Box(

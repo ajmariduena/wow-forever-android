@@ -86,6 +86,7 @@ object WoWLauncherState {
 private const val CONTAINER_ID = "wow_forever"
 private const val READY_STATUS = "Ready to launch"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WoWForeverScreen(
     onLaunch: (appId: String) -> Unit,
@@ -468,7 +469,7 @@ fun WoWForeverScreen(
 
                     Text(text = "Target Path: $gamePath", fontSize = 11.sp, color = WowSubtle, maxLines = 2)
 
-                    Row {
+                    FlowRow(modifier = Modifier.fillMaxWidth()) {
                         OptionMenu("Region: ${region.label}", Icons.Default.Public, GameRegion.entries, region, { it.label }, !isLaunching) {
                             GameRegion.save(context, it)
                             region = it
@@ -644,9 +645,18 @@ fun WoWForeverScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    LinkButton(
+                        text = if (hasSavedLogin) "Update Login" else "Configure Login",
+                        icon = Icons.Default.Key,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        showLoginDialog = true
+                    }
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         LinkButton("Refresh Status", Icons.Default.Refresh) {
                             checkFiles()
@@ -655,12 +665,6 @@ fun WoWForeverScreen(
                         }
                         if (!files.needsInstall) {
                             LinkButton("Change Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
-                        }
-                        LinkButton(
-                            text = if (hasSavedLogin) "Update Login" else "Configure Login",
-                            icon = Icons.Default.Key,
-                        ) {
-                            showLoginDialog = true
                         }
                         if (hasSavedLogin) {
                             LinkButton("Forget Saved Login", Icons.Default.Delete) {
@@ -1056,8 +1060,14 @@ private fun PrimaryButton(text: String, icon: ImageVector, enabled: Boolean, onC
 }
 
 @Composable
-private fun LinkButton(text: String, icon: ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled) {
+private fun LinkButton(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = WowMuted)
         Spacer(modifier = Modifier.width(6.dp))
         Text(text, fontSize = 12.sp, color = WowMuted)
