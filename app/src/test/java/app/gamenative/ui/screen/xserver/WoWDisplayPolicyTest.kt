@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WoWDisplayPolicyTest {
+    @Test fun panelBeginsAtMeasuredSurfaceBottomAndTracksResize() {
+        assertEquals(WoWDisplayPolicy.Split(720, 720), WoWDisplayPolicy.panelEdges(40, 700, 20, 0))
+        assertEquals(WoWDisplayPolicy.Split(620, 620), WoWDisplayPolicy.panelEdges(40, 600, 20, 0))
+        assertEquals(WoWDisplayPolicy.Split(720, 740), WoWDisplayPolicy.panelEdges(40, 700, 20, 20))
+    }
     @Test fun coverStaysSensorLandscape() {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, WoWDisplayPolicy.orientation(320))
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, WoWDisplayPolicy.orientation(599))

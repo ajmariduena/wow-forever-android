@@ -17,12 +17,23 @@ internal object WoWFlexController {
     fun install(activity: Activity, root: View, gameHost: View, controls: InputControlsView, screenSize: String, restore: () -> Unit) {
         var scope: CoroutineScope? = null
         var hinge: Rect? = null
+        var activeSplit: WoWDisplayPolicy.Split? = null
+        val surface = (gameHost as? android.view.ViewGroup)?.getChildAt(0) ?: gameHost
+        (gameHost as? android.view.ViewGroup)?.clipChildren = true
+        fun syncPanelToSurface() {
+            val split = activeSplit ?: return
+            if (surface.height <= 0) return
+            val surfaceLocation = IntArray(2)
+            val controlsLocation = IntArray(2)
+            surface.getLocationInWindow(surfaceLocation)
+            controls.getLocationInWindow(controlsLocation)
+            val edges = WoWDisplayPolicy.panelEdges(surfaceLocation[1], surface.height, controlsLocation[1], split.controlsTop - split.gameBottom)
+            controls.setWoWPanelBounds(edges.gameBottom, edges.controlsTop)
+        }
         fun applyLayout() {
             val bounds = hinge
             val location = IntArray(2)
             gameHost.getLocationInWindow(location)
-            val controlLocation = IntArray(2)
-            controls.getLocationInWindow(controlLocation)
             val rootLocation = IntArray(2)
             root.getLocationInWindow(rootLocation)
             val split = WoWDisplayPolicy.split(
@@ -33,22 +44,23 @@ internal object WoWFlexController {
                 hingeTop = bounds?.top?.minus(rootLocation[1]),
                 hingeBottom = bounds?.bottom?.minus(rootLocation[1]),
             )
+            activeSplit = split
             if (split != null) {
                 val gameHeight = (rootLocation[1] + split.gameBottom - location[1]).coerceAtLeast(1)
                 gameHost.setTag(R.id.wow_flex_height, gameHeight)
                 if (gameHost.layoutParams.height != gameHeight) {
                     gameHost.layoutParams = gameHost.layoutParams.apply { height = gameHeight }
                 }
-                controls.setWoWPanelBounds(
-                    rootLocation[1] + split.gameBottom - controlLocation[1],
-                    rootLocation[1] + split.controlsTop - controlLocation[1],
-                )
+                gameHost.post { syncPanelToSurface() }
             } else {
                 gameHost.setTag(R.id.wow_flex_height, null)
                 restore()
                 controls.setWoWPanelBounds(-1, -1)
             }
         }
+        val surfaceListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncPanelToSurface() }
+        surface.addOnLayoutChangeListener(surfaceListener)
+        controls.addOnLayoutChangeListener(surfaceListener)
         val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyLayout() }
         fun start() {
             if (scope != null) return
@@ -70,6 +82,8 @@ internal object WoWFlexController {
                 scope?.cancel()
                 scope = null
                 root.removeOnLayoutChangeListener(layoutListener)
+                surface.removeOnLayoutChangeListener(surfaceListener)
+                controls.removeOnLayoutChangeListener(surfaceListener)
             }
         })
         if (root.isAttachedToWindow) start()

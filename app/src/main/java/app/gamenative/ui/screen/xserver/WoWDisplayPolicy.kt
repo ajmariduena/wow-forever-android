@@ -10,6 +10,11 @@ internal object WoWDisplayPolicy {
 
     data class Split(val gameBottom: Int, val controlsTop: Int)
 
+    fun panelEdges(surfaceTopInWindow: Int, surfaceHeight: Int, overlayTopInWindow: Int, hingeGap: Int): Split {
+        val edge = surfaceTopInWindow + surfaceHeight - overlayTopInWindow
+        return Split(edge, edge + hingeGap.coerceAtLeast(0))
+    }
+
     fun split(
         width: Int,
         height: Int,
