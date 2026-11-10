@@ -31,6 +31,7 @@ import com.winlator.core.envvars.EnvVarRedaction;
 import com.winlator.core.envvars.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.GPUInformation;
+import com.winlator.core.MachineIdentity;
 import com.winlator.core.ProcessHelper;
 import com.winlator.core.SharedComponents;
 import com.winlator.core.TarCompressorUtils;
@@ -334,6 +335,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         String dnsV4MappedPath = context.getApplicationInfo().nativeLibraryDir + "/libgamenative_dns_v4mapped.so";
         if (new File(dnsV4MappedPath).exists()) {
             ld_preload += ":" + dnsV4MappedPath;
+            envVars.put(MachineIdentity.HOSTNAME_ENV, MachineIdentity.get(context).computerName);
         }
         if (replacePath != null) ld_preload += ":" + replacePath;
 

@@ -132,6 +132,7 @@ import com.winlator.core.FileUtils
 import com.winlator.core.GPUHelper
 import com.winlator.core.GPUInformation
 import com.winlator.core.KeyValueSet
+import com.winlator.core.MachineIdentity
 import com.winlator.core.OnExtractFileListener
 import com.winlator.core.ProcessHelper
 import com.winlator.core.SharedComponents
@@ -4083,6 +4084,8 @@ private suspend fun setupWineSystemFiles(
         container.putExtra("startupSelection", startupSelection)
         containerDataChanged = true
     }
+
+    MachineIdentity.get(context).applyTo(File(container.rootDir, ".wine"))
 
     if (containerDataChanged) container.saveData()
 }
