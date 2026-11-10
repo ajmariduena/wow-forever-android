@@ -24,22 +24,18 @@ class WoWPointerGesturesTest {
         whenever(postDelayed(any(), any())).thenAnswer { call -> handler.postDelayed(call.getArgument(0), call.getArgument(1)) }
         whenever(removeCallbacks(any())).thenAnswer { call -> handler.removeCallbacks(call.getArgument(0)); true }
     }
-    @Test fun floatingRightStickUsesOriginCircularClampAndDeadZone() {
-        assertArrayEquals(floatArrayOf(0f, 0f), WoWTouchGeometry.rightStick(104f, 100f, 100f, 100f, 100f), 0f)
-        val diagonal = WoWTouchGeometry.rightStick(300f, 300f, 100f, 100f, 100f)
-        assertEquals(1.0, Math.hypot(diagonal[0].toDouble(), diagonal[1].toDouble()), .0001)
-        assertTrue(WoWTouchGeometry.rightStick(100f, 50f, 100f, 100f, 100f)[1] < 0)
-    }
-    @Test fun stationaryFingerHoldsRightStickUntilRelease() {
+    @Test fun stationaryFingerDecaysWithoutMoreTouchEventsAndCommitsXInput() {
         val view = view()
         val gestures = WoWPointerGestures(view)
         gestures.down(1, 500f, 400f, true, true, 1f)
         gestures.move(1, 650f, 400f)
-        clearInvocations(view)
-        gestures.move(1, 650f, 400f)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
-        gestures.up(1)
+        verify(view).commitGamepadState()
+        clearInvocations(view)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(44))
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)
+        gestures.up(1)
         verify(view, never()).performWoWGameClick(any(), any())
     }
     @Test fun wheelEligibilityRequiresExactlyTwoGameTouches() {
@@ -65,6 +61,7 @@ class WoWPointerGesturesTest {
         val gestures = WoWPointerGestures(view)
         gestures.down(1, 500f, 300f, true, true, 1f)
         gestures.move(1, 650f, 300f)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
         gestures.down(2, 750f, 300f, true, true, 1f)
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)
         clearInvocations(view)
@@ -83,7 +80,8 @@ class WoWPointerGesturesTest {
         gestures.move(1, 650f, 300f)
         gestures.down(2, 750f, 700f, false, true, 1f)
         clearInvocations(view)
-        gestures.move(1, 650f, 300f)
+        gestures.move(1, 700f, 300f)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
         verify(view, never()).scrollWoWPointer(any(), any(), any())
     }

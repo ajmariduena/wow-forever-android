@@ -15,6 +15,7 @@ final class WoWPointerGestures {
     private final SparseArray<Touch> touches = new SparseArray<>();
     private final WoWTouchGeometry.TapOrDrag gesture = new WoWTouchGeometry.TapOrDrag();
     private final WoWTouchGeometry.Wheel wheel = new WoWTouchGeometry.Wheel();
+    private final WoWCameraVelocity camera = new WoWCameraVelocity();
     private int owner = -1, gameBottom = -1;
     void setGameBottom(int bottom) { gameBottom = bottom; }
     private boolean inGamePoint(float x, float y) {
@@ -23,7 +24,21 @@ final class WoWPointerGestures {
     private boolean wheelDropLogged;
     private boolean scrolling, leftDown, rightStickDown, longClicked;
     private boolean cameraEnabled = true;
-    private float sensitivity = 1, radius;
+    private boolean cameraFramePending;
+    private final Runnable cameraFrame = this::updateCamera;
+    private void updateCamera() {
+        cameraFramePending = false;
+        if (owner < 0 || scrolling || view.isWoWMouseMode()) return;
+        long now = SystemClock.uptimeMillis();
+        float[] deflection = camera.frame(now);
+        axis(deflection[0], deflection[1]);
+        view.commitGamepadState();
+        rightStickDown = deflection[0] != 0 || deflection[1] != 0;
+        if (camera.isActive(now)) scheduleCamera(camera.nextFrameDelay(now));
+    }
+    private void scheduleCamera(long delay) {
+        if (!cameraFramePending) cameraFramePending = view.postDelayed(cameraFrame, delay);
+    }
     private final Runnable longPress = this::onLongPress;
     private void onLongPress() {
         Touch touch = touches.get(owner);
@@ -41,6 +56,7 @@ final class WoWPointerGestures {
     }
     private void releaseOutputs() {
         view.removeCallbacks(longPress);
+        view.removeCallbacks(cameraFrame); cameraFramePending = false; camera.stop();
         if (leftDown) { view.setWoWMouseButton(false, false); leftDown = false; }
         if (rightStickDown) { axis(0, 0); rightStickDown = false; }
     }
@@ -51,7 +67,7 @@ final class WoWPointerGestures {
     }
     private float midpointY() { return (touches.valueAt(0).y + touches.valueAt(1).y) / 2; }
     boolean down(int id, float x, float y, boolean inGame, boolean cameraEnabled, float sensitivity) {
-        this.cameraEnabled = cameraEnabled; this.sensitivity = sensitivity;
+        this.cameraEnabled = cameraEnabled;
         if (view.isWoWMouseMode() && !inGame) { Log.i("WoWTouch", "mouse gesture drop=outside game or in panel"); return true; }
         touches.put(id, new Touch(x, y, inGame));
         if (eligiblePair()) {
@@ -62,8 +78,9 @@ final class WoWPointerGestures {
         if (scrolling) wheel.reset();
         if (scrolling || touches.size() > 1) return true;
         owner = id; longClicked = false;
-        radius = Math.min(view.getWidth(), view.getHeight()) * .12f;
-        gesture.begin(x, y, SystemClock.uptimeMillis(), 4 * density());
+        long now = SystemClock.uptimeMillis();
+        gesture.begin(x, y, now, 4 * density());
+        camera.begin(x, y, now, view.getWidth(), sensitivity);
         if (view.isWoWMouseMode()) { view.moveWoWPointer(x, y); view.postDelayed(longPress, 500); }
         return true;
     }
@@ -84,6 +101,7 @@ final class WoWPointerGestures {
         }
         if (id != owner) return true;
         boolean dragging = gesture.move(x, y);
+        if (!view.isWoWMouseMode()) camera.move(x, y, SystemClock.uptimeMillis());
         if (view.isWoWMouseMode()) {
             if (!inGamePoint(x, y)) { releaseOutputs(); gesture.cancel(); return true; }
             if (dragging) {
@@ -95,8 +113,7 @@ final class WoWPointerGestures {
             }
             view.moveWoWPointer(x, y);
         } else if (dragging && cameraEnabled) {
-            float[] deflection = WoWTouchGeometry.rightStick(x, y, gesture.startX, gesture.startY, radius / sensitivity);
-            axis(deflection[0], deflection[1]); rightStickDown = true;
+            scheduleCamera(16);
         }
         return true;
     }

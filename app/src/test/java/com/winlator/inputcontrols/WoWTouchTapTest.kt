@@ -69,6 +69,9 @@ class WoWTouchTapTest {
         whenever(isWoWGamePoint(any(), any())).thenReturn(true)
         whenever(width).thenReturn(2100)
         whenever(height).thenReturn(900)
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        whenever(postDelayed(any(), any())).thenAnswer { call -> handler.postDelayed(call.getArgument(0), call.getArgument(1)) }
+        whenever(removeCallbacks(any())).thenAnswer { call -> handler.removeCallbacks(call.getArgument(0)); true }
         whenever(resources).thenReturn(RuntimeEnvironment.getApplication().resources)
     }
     @Test fun tapClicksWithoutCameraDeflection() {
@@ -85,6 +88,7 @@ class WoWTouchTapTest {
         val pad = WoWTouchGamepad(view)
         pad.down(1, 1000f, 450f)
         pad.move(1, 1200f, 450f)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 1f)
         pad.cancel()
         verify(view).handleInputEvent(Binding.GAMEPAD_RIGHT_THUMB_RIGHT, true, 0f)
