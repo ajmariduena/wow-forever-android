@@ -76,7 +76,7 @@ public class InputControlsView extends View {
     private ControlsProfile profile;
     private int wowHingeTop = -1, wowHingeBottom = -1;
 
-    public void setWoWHinge(int top, int bottom) {
+    public void setWoWPanelBounds(int top, int bottom) {
         if (wowHingeTop == top && wowHingeBottom == bottom) return;
         cancelTouchRouting();
         wowHingeTop = top; wowHingeBottom = bottom;
@@ -272,7 +272,7 @@ public class InputControlsView extends View {
                 for (ControlElement element : profile.getElements()) {
                     // Hide STICK elements replaced by container shooter mode
                     if (isStickHiddenByShooterMode(element)) continue;
-                    if (element.getType() == ControlElement.Type.WOW_GAMEPAD) element.getWoWGamepad().setHinge(wowHingeTop, wowHingeBottom);
+                    if (element.getType() == ControlElement.Type.WOW_GAMEPAD) element.getWoWGamepad().setPanelBounds(wowHingeTop, wowHingeBottom);
                     element.draw(canvas);
                 }
             }

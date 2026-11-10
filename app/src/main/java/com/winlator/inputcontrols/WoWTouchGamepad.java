@@ -47,7 +47,7 @@ public final class WoWTouchGamepad {
         data.put("cameraDrag", cameraDrag);
         data.put("cameraSensitivity", cameraSensitivity);
     }
-    public void setHinge(int top, int bottom) {
+    public void setPanelBounds(int top, int bottom) {
         if (hingeTop == top && hingeBottom == bottom) return;
         cancel(); hingeTop = top; hingeBottom = bottom; width = 0; view.invalidate();
     }

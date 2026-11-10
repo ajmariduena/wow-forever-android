@@ -83,7 +83,7 @@ class WoWTouchTest {
         val pad = WoWTouchGamepad(view)
         pad.down(1, 200f, 500f)
         pad.move(1, 250f, 500f)
-        pad.setHinge(450, 450)
+        pad.setPanelBounds(450, 450)
         verify(view).handleInputEvent(Binding.GAMEPAD_LEFT_THUMB_RIGHT, true, 0f)
         assertFalse(pad.move(1, 250f, 500f))
     }
@@ -125,7 +125,7 @@ class WoWTouchTest {
             whenever(view.context).thenReturn(context)
             whenever(view.resources).thenReturn(context.resources)
             val pad = WoWTouchGamepad(view)
-            if (name == "flex") pad.setHinge(546, 546)
+            if (name == "flex") pad.setPanelBounds(546, 546)
             val bitmap = android.graphics.Bitmap.createBitmap(dimensions.first, dimensions.second, android.graphics.Bitmap.Config.ARGB_8888)
             pad.draw(android.graphics.Canvas(bitmap))
             val file = java.io.File("build/outputs/wow-touch-$name.png")

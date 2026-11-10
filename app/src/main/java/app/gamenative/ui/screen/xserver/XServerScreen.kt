@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -461,12 +462,21 @@ fun XServerScreen(
         PluviaApp.setActiveSuspendPolicy(suspendPolicy)
     }
 
-    PluviaApp.events.emit(
-        AndroidEvent.SetAllowedOrientation(
-            if (container.isPortraitMode) EnumSet.of(Orientation.PORTRAIT)
-            else PrefManager.allowedOrientation,
-        ),
-    )
+    val isWoW = container.id == "wow_forever"
+    val displayConfiguration = LocalConfiguration.current
+    LaunchedEffect(activity, isWoW, displayConfiguration.smallestScreenWidthDp) {
+        if (isWoW) {
+            activity?.requestedOrientation = WoWDisplayPolicy.orientation(displayConfiguration.smallestScreenWidthDp)
+        }
+    }
+    if (!isWoW) {
+        PluviaApp.events.emit(
+            AndroidEvent.SetAllowedOrientation(
+                if (container.isPortraitMode) EnumSet.of(Orientation.PORTRAIT)
+                else PrefManager.allowedOrientation,
+            ),
+        )
+    }
 
     val xServerState = rememberSaveable(stateSaver = XServerState.Saver) {
         mutableStateOf(
@@ -1719,7 +1729,7 @@ fun XServerScreen(
         }
     }
 
-    val isPortrait = container.isPortraitMode
+    val isPortrait = !isWoW && container.isPortraitMode
     // var launchedView by rememberSaveable { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
         key(isPortrait) {
@@ -2535,8 +2545,8 @@ fun XServerScreen(
                 PluviaApp.touchpadView?.setTouchscreenMouseDisabled(true);
             }
 
-            if (container.name == "WoW Forever" && activity != null) {
-                WoWFlexController.install(activity, mainRoot, gameHost, icView) {
+            if (isWoW && activity != null) {
+                WoWFlexController.install(activity, mainRoot, gameHost, icView, container.screenSize) {
                     updatePortraitGameHostHeight(gameHost, isPortrait, container.isPortraitBelowCutout, screenWidth, container.screenSize)
                 }
             }

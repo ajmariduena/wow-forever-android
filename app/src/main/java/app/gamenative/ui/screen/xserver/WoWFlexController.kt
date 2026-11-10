@@ -14,7 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 internal object WoWFlexController {
-    fun install(activity: Activity, root: View, gameHost: View, controls: InputControlsView, restore: () -> Unit) {
+    fun install(activity: Activity, root: View, gameHost: View, controls: InputControlsView, screenSize: String, restore: () -> Unit) {
         var scope: CoroutineScope? = null
         var hinge: Rect? = null
         fun applyLayout() {
@@ -23,17 +23,30 @@ internal object WoWFlexController {
             gameHost.getLocationInWindow(location)
             val controlLocation = IntArray(2)
             controls.getLocationInWindow(controlLocation)
-            if (bounds != null && bounds.top > location[1]) {
-                val top = bounds.top - location[1]
-                gameHost.setTag(R.id.wow_flex_height, top)
-                if (gameHost.layoutParams.height != top) {
-                    gameHost.layoutParams = gameHost.layoutParams.apply { height = top }
+            val rootLocation = IntArray(2)
+            root.getLocationInWindow(rootLocation)
+            val split = WoWDisplayPolicy.split(
+                width = root.width,
+                height = root.height,
+                smallestScreenWidthDp = root.resources.configuration.smallestScreenWidthDp,
+                screenSize = screenSize,
+                hingeTop = bounds?.top?.minus(rootLocation[1]),
+                hingeBottom = bounds?.bottom?.minus(rootLocation[1]),
+            )
+            if (split != null) {
+                val gameHeight = (rootLocation[1] + split.gameBottom - location[1]).coerceAtLeast(1)
+                gameHost.setTag(R.id.wow_flex_height, gameHeight)
+                if (gameHost.layoutParams.height != gameHeight) {
+                    gameHost.layoutParams = gameHost.layoutParams.apply { height = gameHeight }
                 }
-                controls.setWoWHinge(bounds.top - controlLocation[1], bounds.bottom - controlLocation[1])
+                controls.setWoWPanelBounds(
+                    rootLocation[1] + split.gameBottom - controlLocation[1],
+                    rootLocation[1] + split.controlsTop - controlLocation[1],
+                )
             } else {
                 gameHost.setTag(R.id.wow_flex_height, null)
                 restore()
-                controls.setWoWHinge(-1, -1)
+                controls.setWoWPanelBounds(-1, -1)
             }
         }
         val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyLayout() }
