@@ -3,6 +3,7 @@ package com.winlator.inputcontrols
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
+import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -38,6 +39,18 @@ class GameControllerClassifierTest {
         assertEquals(expected, GameControllerClassifier.isGameController(device))
         assertEquals(expected, ControllerManager.isGameController(device))
         assertEquals(expected, ExternalController.isGameController(device))
+    }
+
+    @Test
+    fun `repeated calls keep classification fresh and log only result changes`() {
+        val device = device(InputDevice.SOURCE_GAMEPAD, buttons = true)
+        every { device.id } returns 987654
+        repeat(3) { assertClassification(true, device) }
+        verify(exactly = 1) { Log.i(any(), any()) }
+
+        every { device.hasKeys(*anyIntVararg()) } returns booleanArrayOf(false, false, false, false)
+        repeat(3) { assertClassification(false, device) }
+        verify(exactly = 2) { Log.i(any(), any()) }
     }
 
     @Test

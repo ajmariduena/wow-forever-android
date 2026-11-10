@@ -5,7 +5,10 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 public final class GameControllerClassifier {
+    private static final ConcurrentHashMap<Integer, Boolean> loggedResults = new ConcurrentHashMap<>();
     private GameControllerClassifier() {}
 
     public static boolean isGameController(InputDevice device) {
@@ -37,14 +40,17 @@ public final class GameControllerClassifier {
         }
 
         boolean accepted = (isGamepad && hasGamepadKeys) || (isJoystick && hasAxes);
-        String reason = isGamepad && hasGamepadKeys ? "gamepad buttons"
-                : isJoystick && hasAxes ? "controller axes"
-                : !isGamepad && !isJoystick ? "no controller source"
-                : "no controller buttons or axes";
-        Log.i("GameControllerClassifier", "name=" + device.getName()
-                + " vid=" + device.getVendorId() + " pid=" + device.getProductId()
-                + " sources=0x" + Integer.toHexString(device.getSources())
-                + " " + (accepted ? "accepted" : "rejected") + " reason=" + reason);
+        Boolean previous = loggedResults.put(device.getId(), accepted);
+        if (previous == null || previous != accepted) {
+            String reason = isGamepad && hasGamepadKeys ? "gamepad buttons"
+                    : isJoystick && hasAxes ? "controller axes"
+                    : !isGamepad && !isJoystick ? "no controller source"
+                    : "no controller buttons or axes";
+            Log.i("GameControllerClassifier", "name=" + device.getName()
+                    + " vid=" + device.getVendorId() + " pid=" + device.getProductId()
+                    + " sources=0x" + Integer.toHexString(device.getSources())
+                    + " " + (accepted ? "accepted" : "rejected") + " reason=" + reason);
+        }
         return accepted;
     }
 
