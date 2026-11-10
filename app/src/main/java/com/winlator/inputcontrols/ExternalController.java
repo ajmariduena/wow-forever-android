@@ -367,44 +367,7 @@ public class ExternalController {
     }
 
     public static boolean isGameController(InputDevice device) {
-        if (device == null) return false;
-        if (device.isVirtual()) return false;
-
-        boolean isGamepad = device.supportsSource(InputDevice.SOURCE_GAMEPAD);
-        boolean isJoystick = device.supportsSource(InputDevice.SOURCE_JOYSTICK);
-
-        // Only consider axes reported under a controller source class. Composite HID
-        // devices (e.g. keyboards with built-in touchpads) expose AXIS_X/AXIS_Y through
-        // SOURCE_MOUSE and may wrongly claim SOURCE_JOYSTICK in their source mask, which
-        // caused them to be treated as gamepads. SOURCE_GAMEPAD is queried as well, for
-        // drivers that attach the sticks to the gamepad source instead.
-        boolean hasAxes =
-                hasControllerAxis(device, android.view.MotionEvent.AXIS_X) ||
-                        hasControllerAxis(device, android.view.MotionEvent.AXIS_Y);
-
-        boolean[] hasGamepadKeysArray = device.hasKeys(
-                KeyEvent.KEYCODE_BUTTON_A,
-                KeyEvent.KEYCODE_BUTTON_B,
-                KeyEvent.KEYCODE_BUTTON_X,
-                KeyEvent.KEYCODE_BUTTON_Y
-        );
-
-        boolean hasGamepadKeys = false;
-        for (boolean hasKey : hasGamepadKeysArray) {
-            if (hasKey) {
-                hasGamepadKeys = true;
-                break;
-            }
-        }
-
-        return (isGamepad && hasGamepadKeys) ||
-                (isJoystick && hasAxes);
-    }
-
-    /** Shared with {@link ControllerManager#isGameController(InputDevice)}. */
-    static boolean hasControllerAxis(InputDevice device, int axis) {
-        return device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK) != null ||
-                device.getMotionRange(axis, InputDevice.SOURCE_GAMEPAD) != null;
+        return GameControllerClassifier.isGameController(device);
     }
 
     public static float getCenteredAxis(MotionEvent event, int axis, int historyPos) {
