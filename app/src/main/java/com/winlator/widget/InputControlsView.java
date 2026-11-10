@@ -546,6 +546,27 @@ public class InputControlsView extends View {
         this.touchpadView = touchpadView;
     }
 
+    public void performWoWGameClick(float x, float y) {
+        if (xServer == null || xServer.getRenderer() == null) return;
+        com.winlator.renderer.XServerRenderer renderer = xServer.getRenderer();
+        if (!(renderer.getRendererView() instanceof View)) return;
+        View surface = (View)renderer.getRendererView();
+        int[] surfaceLocation = new int[2], overlayLocation = new int[2];
+        surface.getLocationInWindow(surfaceLocation);
+        getLocationInWindow(overlayLocation);
+        int scalingMode = renderer.isFullscreen() ? 1 : 0;
+        if (!renderer.isFullscreen() && renderer instanceof com.winlator.renderer.VulkanRenderer) {
+            scalingMode = ((com.winlator.renderer.VulkanRenderer)renderer).getOutputScalingMode();
+        }
+        float[] point = com.winlator.inputcontrols.WoWTouchGeometry.gamePoint(x, y,
+                surfaceLocation[0] - overlayLocation[0], surfaceLocation[1] - overlayLocation[1],
+                surface.getWidth(), surface.getHeight(), xServer.screenInfo.width, xServer.screenInfo.height, scalingMode);
+        if (point == null) return;
+        xServer.injectPointerMove((int)point[0], (int)point[1]);
+        xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+        xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+    }
+
     public XServer getXServer() {
         return xServer;
     }
@@ -1553,7 +1574,12 @@ public class InputControlsView extends View {
                             handled = true;
                         }
                     }
-                    for (ControlElement element : profile.getElements()) if (element.handleTouchUp(pointerId)) handled = true;
+                    for (ControlElement element : profile.getElements()) {
+                        if (element.getType() == ControlElement.Type.WOW_GAMEPAD) {
+                            element.handleTouchMove(pointerId, event.getX(actionIndex), event.getY(actionIndex));
+                        }
+                        if (element.handleTouchUp(pointerId)) handled = true;
+                    }
                     if (touchpadPointers.get(pointerId)) touchpadView.onTouchEvent(event);
                     lookThroughPointerState.release(pointerId);
                     touchpadPointers.delete(pointerId);

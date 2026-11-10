@@ -40,6 +40,7 @@ class WoWTouchTest {
         assertEquals(WoWTouchGeometry.Layout.OPEN, WoWTouchGeometry.layout(1100f, 1000f, true, false))
     }
     private fun view(): InputControlsView = mock<InputControlsView>().apply {
+        whenever(resources).thenReturn(RuntimeEnvironment.getApplication().resources)
         whenever(width).thenReturn(2100)
         whenever(height).thenReturn(900)
         whenever(maxWidth).thenReturn(2100)
