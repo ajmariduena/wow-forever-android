@@ -46,7 +46,6 @@ class MainViewModel @Inject constructor(
     }
 
     sealed class MainUiEvent {
-        data object OnBackPressed : MainUiEvent()
         data object LaunchApp : MainUiEvent()
     }
 
@@ -62,13 +61,6 @@ class MainViewModel @Inject constructor(
     fun setOffline(value: Boolean) {
         _offline.value = value
     }
-
-    private val onBackPressed: (AndroidEvent.BackPressed) -> Unit = {
-        viewModelScope.launch {
-            _uiEvent.send(MainUiEvent.OnBackPressed)
-        }
-    }
-
 
     private val onSetBootingSplashText: (AndroidEvent.SetBootingSplashText) -> Unit = {
         if (_state.value.showBootingSplash) {
@@ -98,13 +90,11 @@ class MainViewModel @Inject constructor(
             )
         }
 
-        PluviaApp.events.on<AndroidEvent.BackPressed, Unit>(onBackPressed)
         PluviaApp.events.on<AndroidEvent.SetBootingSplashText, Unit>(onSetBootingSplashText)
         PluviaApp.events.on<AndroidEvent.ClearBootingSplash, Unit>(onClearBootingSplash)
     }
 
     override fun onCleared() {
-        PluviaApp.events.off<AndroidEvent.BackPressed, Unit>(onBackPressed)
         PluviaApp.events.off<AndroidEvent.SetBootingSplashText, Unit>(onSetBootingSplashText)
         PluviaApp.events.off<AndroidEvent.ClearBootingSplash, Unit>(onClearBootingSplash)
     }

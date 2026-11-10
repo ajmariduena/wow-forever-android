@@ -124,25 +124,12 @@ fun PluviaMain(
 
 
 
-    var hasBack by rememberSaveable { mutableStateOf(navController.previousBackStackEntry?.destination?.route != null) }
-
-
-    var gameBackAction by remember { mutableStateOf<() -> Unit?>({}) }
-
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
             when (event) {
                 MainViewModel.MainUiEvent.LaunchApp -> {
                     if (state.showBootingSplash) {
                         navController.navigate(PluviaScreen.XServer.route)
-                    }
-                }
-
-                MainViewModel.MainUiEvent.OnBackPressed -> {
-                    if (PluviaApp.keepAlive) {
-                        gameBackAction?.invoke() ?: run { navController.popBackStack() }
-                    } else if (hasBack) {
-                        navController.popBackStack()
                     }
                 }
             }
@@ -189,8 +176,6 @@ fun PluviaMain(
                 // reset available orientations
                 PluviaApp.events.emit(AndroidEvent.SetAllowedOrientation(EnumSet.of(Orientation.UNSPECIFIED)))
             }
-            // find out if back is available
-            hasBack = navController.previousBackStackEntry?.destination?.route != null
         }
     }
 
@@ -350,10 +335,6 @@ fun PluviaMain(
                     XServerScreen(
                         appId = state.launchedAppId,
                         isOffline = xServerIsOffline,
-                        registerBackAction = { cb ->
-                            Timber.d("registerBackAction called: $cb")
-                            gameBackAction = cb
-                        },
                         navigateBack = {
                             CoroutineScope(Dispatchers.Main).launch {
                                 val currentRoute = navController.currentBackStackEntry

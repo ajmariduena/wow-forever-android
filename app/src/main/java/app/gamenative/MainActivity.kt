@@ -25,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import app.gamenative.BuildConfig
 import app.gamenative.PrefManager
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.PluviaMain
@@ -213,21 +212,13 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        var eventDispatched = PluviaApp.events.emit(AndroidEvent.KeyEvent(event)) { keyEvent ->
+        val eventDispatched = PluviaApp.events.emit(AndroidEvent.KeyEvent(event)) { keyEvent ->
             keyEvent.any { it }
         } == true
 
-        if (!eventDispatched) {
-            if (event.keyCode == KeyEvent.KEYCODE_BACK && PluviaApp.keepAlive) {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    PluviaApp.events.emit(AndroidEvent.BackPressed)
-                    eventDispatched = true
-                } else if (BuildConfig.MODERN_ANDROID && event.action == KeyEvent.ACTION_UP) {
-                    eventDispatched = true
-                }
-            }
-        }
-
+        // Keep Back in Android's dispatch chain: the IME gets first refusal and only
+        // a completed, uncancelled press reaches OnBackPressedDispatcher.
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
         return if (!eventDispatched) super.dispatchKeyEvent(event) else true
     }
 

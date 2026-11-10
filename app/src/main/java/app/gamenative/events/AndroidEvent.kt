@@ -4,7 +4,6 @@ import app.gamenative.ui.enums.Orientation
 import java.util.EnumSet
 
 interface AndroidEvent<T> : Event<T> {
-    data object BackPressed : AndroidEvent<Unit>
     data class SetSystemUIVisibility(val visible: Boolean) : AndroidEvent<Unit>
     data class SetAllowedOrientation(val orientations: EnumSet<Orientation>) : AndroidEvent<Unit>
     data object ActivityDestroyed : AndroidEvent<Unit>
