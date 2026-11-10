@@ -48,6 +48,7 @@ class WoWXInputWiringTest {
         }
         val packets = mutableListOf<GamepadState>()
         init {
+            ControllerManager.getInstance().init(context)
             whenever(server.getWinHandler()).thenReturn(handler)
             ReflectionHelpers.setField(handler, "gamepadBuffer", memory)
             view.layout(0, 0, 1100, 1000)
@@ -55,6 +56,7 @@ class WoWXInputWiringTest {
             ReflectionHelpers.setField(view, "xServer", server)
             profile.addElement(element)
             profile.setVirtualGamepad(true)
+            handler.setInputControlsView(view)
             view.setProfile(profile)
             view.setWoWPanelBounds(560, 560)
             view.draw(Canvas(Bitmap.createBitmap(1100, 1000, Bitmap.Config.ARGB_8888)))

@@ -29,7 +29,10 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     private boolean elementsLoaded = false;
     private boolean controllersLoaded = false;
     private boolean radialMenusLoaded = false;
-    private boolean virtualGamepad = false;
+    private volatile boolean virtualGamepad = false;
+    private volatile boolean wowGamepad;
+    public boolean hasWoWGamepad() { return wowGamepad; }
+    public void setHasWoWGamepad(boolean value) { wowGamepad = value; }
     private final Context context;
     private GamepadState gamepadState;
 
@@ -55,7 +58,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     }
 
     public boolean isVirtualGamepad() {
-        return virtualGamepad;
+        return virtualGamepad || wowGamepad;
     }
 
     public void setVirtualGamepad(boolean isVirtualGamepad) {
@@ -185,6 +188,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
 
     public void addElement(ControlElement element) {
         elements.add(element);
+        if (element.getType() == ControlElement.Type.WOW_GAMEPAD) wowGamepad = true;
         elementsLoaded = true;
     }
 
@@ -260,6 +264,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
         Log.d("ControlsProfile", "Loading controllers for profile: " + name + " (ID: " + id + ") from " + file.getAbsolutePath());
 
         if (!file.isFile()) {
+            if (wowGamepad) Log.i("WoWTouch", "profile load drop=missing file id=" + id + " virtual=" + isVirtualGamepad());
             Log.d("ControlsProfile", "Profile file does not exist: " + name);
             return controllers;
         }
@@ -306,10 +311,12 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     public void loadElements(InputControlsView inputControlsView) {
         elements.clear();
         elementsLoaded = false;
-        virtualGamepad = false;
+        virtualGamepad = wowGamepad;
+        if (wowGamepad) Log.i("WoWTouch", "profile load start id=" + id + " virtual=" + isVirtualGamepad() + " view=" + inputControlsView.getWidth() + "x" + inputControlsView.getHeight());
 
         // Check if view has valid dimensions before loading
         if (inputControlsView.getMaxWidth() == 0 || inputControlsView.getMaxHeight() == 0) {
+            if (wowGamepad) Log.i("WoWTouch", "profile load deferred id=" + id + " virtual=" + isVirtualGamepad());
             Log.w("ControlsProfile", "Cannot load elements - view has no dimensions yet (width: " +
                 inputControlsView.getWidth() + ", height: " + inputControlsView.getHeight() + ")");
             return;
@@ -319,6 +326,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
         Log.d("ControlsProfile", "Loading elements for profile: " + name + " (ID: " + id + ") from " + file.getAbsolutePath());
 
         if (!file.isFile()) {
+            if (wowGamepad) Log.i("WoWTouch", "profile load drop=missing file id=" + id + " virtual=" + isVirtualGamepad());
             Log.d("ControlsProfile", "Profile file does not exist: " + name);
             return;
         }
@@ -338,6 +346,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
                 if (element.getType() == ControlElement.Type.WOW_GAMEPAD) {
                     element.getWoWGamepad().readOptions(elementJSONObject);
                     virtualGamepad = true;
+                    wowGamepad = true;
                 }
                 if (elementJSONObject.has("lookThrough")) {
                     element.setLookThroughSetting(elementJSONObject.getBoolean("lookThrough"));
@@ -383,6 +392,8 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
                 elements.add(element);
             }
             elementsLoaded = true;
+            if (wowGamepad) Log.i("WoWTouch", "profile loaded id=" + id + " elements=" + elements.size() + " virtual=" + isVirtualGamepad());
+            inputControlsView.onProfileElementsLoaded(this);
             Log.d("ControlsProfile", "Loaded " + elements.size() + " elements for profile: " + name + " (virtualGamepad: " + virtualGamepad + ")");
         }
         catch (JSONException e) {

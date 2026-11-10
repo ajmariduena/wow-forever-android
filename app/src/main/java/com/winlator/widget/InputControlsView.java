@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
+import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
@@ -75,17 +76,62 @@ public class InputControlsView extends View {
     private ControlElement selectedElement;
     private ControlsProfile profile;
     private boolean wowMouseMode;
+    private final android.os.Handler wowClickHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Map<Pointer.Button, Runnable> wowClickReleases = new EnumMap<>(Pointer.Button.class);
+    private void cancelWoWMouseClicks() {
+        if (wowClickReleases.containsKey(Pointer.Button.BUTTON_LEFT)) setWoWMouseButton(false, false);
+        if (wowClickReleases.containsKey(Pointer.Button.BUTTON_RIGHT)) setWoWMouseButton(true, false);
+    }
     public boolean isWoWMouseMode() { return wowMouseMode; }
     public void setWoWMouseMode(boolean enabled) {
-        cancelTouchRouting(); wowMouseMode = enabled; invalidate();
+        cancelTouchRouting(); wowMouseMode = enabled;
+        Log.i("WoWTouch", "mouse mode=" + enabled);
+        invalidate();
     }
 
     public boolean isWoWGamepadProfileActive() {
         if (profile == null) return false;
+        if (profile.hasWoWGamepad()) return true;
         for (ControlElement element : profile.getElements()) {
             if (element.getType() == ControlElement.Type.WOW_GAMEPAD) return true;
         }
         return false;
+    }
+
+    private boolean wowVirtualP1Managed;
+    public void onProfileElementsLoaded(ControlsProfile loadedProfile) {
+        if (loadedProfile != profile) return;
+        applyShooterMouseInputMode();
+        syncWoWVirtualGamepad();
+    }
+
+    private void syncWoWVirtualGamepad() {
+        boolean wow = isWoWGamepadProfileActive();
+        if (!wow && !wowVirtualP1Managed) return;
+        if (xServer == null || xServer.getWinHandler() == null) return;
+        wowVirtualP1Managed = wow;
+        xServer.getWinHandler().refreshVirtualGamepadProfile();
+    }
+
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        syncWoWVirtualGamepad();
+    }
+
+    public static void logWoWHostEvent(MotionEvent event, boolean composeControlsVisible) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) Log.i("WoWTouch", "host touch down composeControlsVisible=" + composeControlsVisible);
+    }
+
+    public boolean dispatchWoWHostTouch(MotionEvent event) {
+        int[] location = new int[2];
+        getLocationOnScreen(location);
+        MotionEvent local = MotionEvent.obtain(event);
+        local.offsetLocation(event.getRawX() - event.getX() - location[0], event.getRawY() - event.getY() - location[1]);
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            Log.i("WoWTouch", "host down profile=" + (profile != null ? profile.id : -1) + " virtual=" + (profile != null && profile.isVirtualGamepad()) + " visible=" + getVisibility() + " show=" + showTouchscreenControls);
+        }
+        try { return onTouchEvent(local); } finally { local.recycle(); }
     }
 
     private int wowHingeTop = -1, wowHingeBottom = -1;
@@ -229,6 +275,7 @@ public class InputControlsView extends View {
     }
 
     private void cancelTouchRouting() {
+        cancelWoWMouseClicks();
         cancelBindingSequences();
         if (radialMenuTouchActive) handleRadialMenuTouchUp(radialMenuTouchPointerId, false);
         if (profile != null) {
@@ -447,6 +494,7 @@ public class InputControlsView extends View {
         onControlsProfileContentChanged(profileChanged);
         applyShooterMouseInputMode();
         gyroController.setHasProfile(profile != null);
+        syncWoWVirtualGamepad();
     }
 
     /** Hides the controls profile from drawing without disabling per-game gyro input. */
@@ -455,6 +503,7 @@ public class InputControlsView extends View {
         synchronized (this) {
             this.profile = null;
         }
+        syncWoWVirtualGamepad();
     }
 
     /** Re-evaluates latched gyro activation after the active profile is edited in place. */
@@ -474,6 +523,7 @@ public class InputControlsView extends View {
 
     public void setShowTouchscreenControls(boolean showTouchscreenControls) {
         this.showTouchscreenControls = showTouchscreenControls;
+        syncWoWVirtualGamepad();
     }
 
     public boolean isGyroAvailable() {
@@ -562,9 +612,10 @@ public class InputControlsView extends View {
     }
 
     private float[] mapWoWGamePoint(float x, float y) {
-        if (xServer == null || xServer.getRenderer() == null) return null;
+        if (xServer == null) { Log.i("WoWTouch", "point drop=no X server"); return null; }
+        if (xServer.getRenderer() == null) { Log.i("WoWTouch", "point drop=no renderer"); return null; }
         com.winlator.renderer.XServerRenderer renderer = xServer.getRenderer();
-        if (!(renderer.getRendererView() instanceof View)) return null;
+        if (!(renderer.getRendererView() instanceof View)) { Log.i("WoWTouch", "point drop=renderer view is unavailable"); return null; }
         View surface = (View)renderer.getRendererView();
         int[] surfaceLocation = new int[2], overlayLocation = new int[2];
         surface.getLocationInWindow(surfaceLocation);
@@ -576,6 +627,9 @@ public class InputControlsView extends View {
         float[] point = com.winlator.inputcontrols.WoWTouchGeometry.gamePoint(x, y,
                 surfaceLocation[0] - overlayLocation[0], surfaceLocation[1] - overlayLocation[1],
                 surface.getWidth(), surface.getHeight(), xServer.screenInfo.width, xServer.screenInfo.height, scalingMode);
+        if (point == null) Log.i("WoWTouch", "point drop=outside rendered game x=" + x + " y=" + y
+                + " surface=" + (surfaceLocation[0]-overlayLocation[0]) + "," + (surfaceLocation[1]-overlayLocation[1])
+                + "," + surface.getWidth() + "x" + surface.getHeight() + " game=" + xServer.screenInfo.width + "x" + xServer.screenInfo.height);
         return point;
     }
 
@@ -591,6 +645,11 @@ public class InputControlsView extends View {
     public void setWoWMouseButton(boolean right, boolean down) {
         if (xServer == null) return;
         Pointer.Button button = right ? Pointer.Button.BUTTON_RIGHT : Pointer.Button.BUTTON_LEFT;
+        Runnable pending = wowClickReleases.remove(button);
+        if (pending != null) {
+            wowClickHandler.removeCallbacks(pending);
+            if (down) xServer.injectPointerButtonRelease(button);
+        }
         if (down) xServer.injectPointerButtonPress(button);
         else xServer.injectPointerButtonRelease(button);
     }
@@ -598,13 +657,18 @@ public class InputControlsView extends View {
     public void performWoWGameClick(float x, float y) { clickWoWPointer(x, y, false); }
 
     public void clickWoWPointer(float x, float y, boolean right) {
-        if (!moveWoWPointer(x, y)) return;
+        if (!moveWoWPointer(x, y)) { Log.i("WoWTouch", "click drop=invalid game point"); return; }
+        Log.i("WoWTouch", "click=" + (right ? "right" : "left") + " x=" + x + " y=" + y + " holdMs=50");
         setWoWMouseButton(right, true);
-        setWoWMouseButton(right, false);
+        Runnable release = () -> setWoWMouseButton(right, false);
+        wowClickReleases.put(right ? Pointer.Button.BUTTON_RIGHT : Pointer.Button.BUTTON_LEFT, release);
+        wowClickHandler.postDelayed(release, 50);
     }
 
     public void scrollWoWPointer(float x, float y, int steps) {
-        if (steps == 0 || !moveWoWPointer(x, y)) return;
+        if (steps == 0) return;
+        if (!moveWoWPointer(x, y)) { Log.i("WoWTouch", "scroll drop=invalid game point steps=" + steps); return; }
+        Log.i("WoWTouch", "scroll steps=" + steps + " x=" + x + " y=" + y);
         Pointer.Button button = steps > 0 ? Pointer.Button.BUTTON_SCROLL_UP : Pointer.Button.BUTTON_SCROLL_DOWN;
         for (int i = 0; i < Math.abs(steps); i++) {
             xServer.injectPointerButtonPress(button);
@@ -623,7 +687,7 @@ public class InputControlsView extends View {
     }
 
     public int getMaxWidth() {
-        return (int)Mathf.roundTo(getWidth(), snappingSize);
+        return (int)Mathf.roundTo(getWidth(), Math.max(1, snappingSize));
     }
 
     @Override
@@ -642,7 +706,7 @@ public class InputControlsView extends View {
     }
 
     public int getMaxHeight() {
-        return (int)Mathf.roundTo(getHeight(), snappingSize);
+        return (int)Mathf.roundTo(getHeight(), Math.max(1, snappingSize));
     }
 
     private void createMouseMoveTimer() {
@@ -1497,6 +1561,7 @@ public class InputControlsView extends View {
         }
 
         if (!editMode && profile != null) {
+            if (isWoWGamepadProfileActive() && !profile.isElementsLoaded()) profile.loadElements(this);
             int actionIndex = event.getActionIndex();
             int pointerId = event.getPointerId(actionIndex);
             int actionMasked = event.getActionMasked();

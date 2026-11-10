@@ -2,6 +2,7 @@ package com.winlator.inputcontrols;
 
 import android.os.SystemClock;
 import android.util.SparseArray;
+import android.util.Log;
 import com.winlator.widget.InputControlsView;
 
 final class WoWPointerGestures {
@@ -19,6 +20,7 @@ final class WoWPointerGestures {
     private boolean inGamePoint(float x, float y) {
         return (gameBottom < 0 || y < gameBottom) && view.isWoWGamePoint(x, y);
     }
+    private boolean wheelDropLogged;
     private boolean scrolling, leftDown, rightStickDown, longClicked;
     private boolean cameraEnabled = true;
     private float sensitivity = 1, radius;
@@ -50,11 +52,12 @@ final class WoWPointerGestures {
     private float midpointY() { return (touches.valueAt(0).y + touches.valueAt(1).y) / 2; }
     boolean down(int id, float x, float y, boolean inGame, boolean cameraEnabled, float sensitivity) {
         this.cameraEnabled = cameraEnabled; this.sensitivity = sensitivity;
-        if (view.isWoWMouseMode() && !inGame) return true;
+        if (view.isWoWMouseMode() && !inGame) { Log.i("WoWTouch", "mouse gesture drop=outside game or in panel"); return true; }
         touches.put(id, new Touch(x, y, inGame));
         if (eligiblePair()) {
+            Log.i("WoWTouch", "gesture=two-finger wheel");
             releaseOutputs(); gesture.cancel(); scrolling = true;
-            wheel.begin(midpointY()); return true;
+            wheelDropLogged = false; wheel.begin(midpointY()); return true;
         }
         if (scrolling) wheel.reset();
         if (scrolling || touches.size() > 1) return true;
@@ -69,7 +72,11 @@ final class WoWPointerGestures {
         if (touch == null) return false;
         touch.x = x; touch.y = y;
         if (scrolling) {
-            if (!eligiblePair()) { wheel.reset(); return true; }
+            if (!eligiblePair()) {
+                if (!wheelDropLogged) Log.i("WoWTouch", "scroll drop=requires two touches inside game count=" + touches.size());
+                wheelDropLogged = true; wheel.reset(); return true;
+            }
+            wheelDropLogged = false;
             if (!wheel.isActive()) wheel.begin(midpointY());
             int steps = wheel.move(midpointY(), 24 * density());
             if (steps != 0) view.scrollWoWPointer((touches.valueAt(0).x + touches.valueAt(1).x) / 2, midpointY(), steps);
@@ -99,9 +106,11 @@ final class WoWPointerGestures {
         touches.remove(id);
         if (id == owner) {
             releaseOutputs();
-            if (!scrolling && !longClicked && touch.inGame && inGamePoint(touch.x, touch.y) && gesture.isTap(SystemClock.uptimeMillis())) {
-                view.performWoWGameClick(gesture.startX, gesture.startY);
-            }
+            boolean tap = gesture.isTap(SystemClock.uptimeMillis());
+            String reason = scrolling ? "wheel" : longClicked ? "long press" : !touch.inGame ? "outside game or in panel"
+                : !inGamePoint(touch.x, touch.y) ? "release outside game" : !tap ? "drag or timeout" : null;
+            Log.i("WoWTouch", reason == null ? "tap=click" : "tap drop=" + reason);
+            if (reason == null) view.performWoWGameClick(gesture.startX, gesture.startY);
             gesture.cancel(); owner = -1;
         }
         if (touches.size() == 0) { scrolling = false; wheel.reset(); }

@@ -13,6 +13,15 @@ import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 class InputControlsViewWoWClickTest {
+    @Test fun missingRendererIsDiagnosedAndDoesNotInject() {
+        val server = mock<XServer>()
+        val view = InputControlsView(RuntimeEnvironment.getApplication())
+        ReflectionHelpers.setField(view, "xServer", server)
+        view.performWoWGameClick(100f, 100f)
+        verify(server, never()).injectPointerButtonPress(any())
+        org.junit.Assert.assertTrue(org.robolectric.shadows.ShadowLog.getLogsForTag("WoWTouch").any { it.msg.contains("no renderer") })
+    }
+
     @Test fun clickUsesActualSurfaceOffsetAndInjectsMovePressReleaseInOrder() {
         val server = mock<XServer>()
         ReflectionHelpers.setField(server, "screenInfo", ScreenInfo(1920, 1080))
@@ -29,6 +38,8 @@ class InputControlsViewWoWClickTest {
         val view = InputControlsView(RuntimeEnvironment.getApplication())
         ReflectionHelpers.setField(view, "xServer", server)
         view.performWoWGameClick(520f, 311f)
+        verify(server, never()).injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
         inOrder(server) {
             verify(server).injectPointerMove(960, 539)
             verify(server).injectPointerButtonPress(Pointer.Button.BUTTON_LEFT)
@@ -36,6 +47,7 @@ class InputControlsViewWoWClickTest {
         }
         clearInvocations(server)
         view.clickWoWPointer(520f, 311f, true)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
         verify(server).injectPointerButtonPress(Pointer.Button.BUTTON_RIGHT)
         verify(server).injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT)
         clearInvocations(server)
@@ -46,5 +58,17 @@ class InputControlsViewWoWClickTest {
         view.performWoWGameClick(520f, 700f)
         verify(server, never()).injectPointerMove(any(), any())
         verify(server, never()).injectPointerButtonPress(any())
+        clearInvocations(server)
+        view.performWoWGameClick(520f, 311f)
+        view.setWoWMouseButton(false, true)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
+        verify(server, times(1)).injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT)
+        view.setWoWMouseButton(false, false)
+        verify(server, times(2)).injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT)
+        clearInvocations(server)
+        view.performWoWGameClick(520f, 311f)
+        view.setProfile(null)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
+        verify(server, times(1)).injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT)
     }
 }

@@ -1744,6 +1744,7 @@ fun XServerScreen(
             .fillMaxSize()
             .pointerHoverIcon(PointerIcon.Default)
             .pointerInteropFilter { event ->
+                if (isWoW) InputControlsView.logWoWHostEvent(event, areControlsVisible)
                 val hud = performanceHudView
                 if (hud != null) {
                     when (event.actionMasked) {
@@ -1829,11 +1830,11 @@ fun XServerScreen(
                 if (isPortrait) {
                     gameRoot?.dispatchTouchEvent(event)
                 } else {
-                    val controlsHandled = if (areControlsVisible) {
-                        PluviaApp.inputControlsView?.onTouchEvent(event) ?: false
-                    } else {
-                        false
-                    }
+                    val controlsHandled = PluviaApp.inputControlsView?.let { controls ->
+                        if (controls.isWoWGamepadProfileActive && controls.visibility == View.VISIBLE && controls.isShowTouchscreenControls) {
+                            controls.dispatchWoWHostTouch(event)
+                        } else if (areControlsVisible) controls.onTouchEvent(event) else false
+                    } ?: false
                     if (!controlsHandled) {
                         PluviaApp.touchpadView?.onTouchEvent(event)
                     }
@@ -3110,7 +3111,7 @@ private fun showInputControls(profile: ControlsProfile, winHandler: WinHandler, 
                     icView.setVisibility(View.VISIBLE)
                     icView.requestFocus()
                     icView.invalidate()
-                    winHandler.refreshControllerMappings()
+                    winHandler.refreshVirtualGamepadProfile()
                 }
             } else {
                 // View has dimensions but elements not loaded - load them now
@@ -3121,7 +3122,7 @@ private fun showInputControls(profile: ControlsProfile, winHandler: WinHandler, 
                 icView.setVisibility(View.VISIBLE)
                 icView.requestFocus()
                 icView.invalidate()
-                winHandler.refreshControllerMappings()
+                winHandler.refreshVirtualGamepadProfile()
             }
         } else {
             // Elements already loaded with valid dimensions - just show
@@ -3131,23 +3132,15 @@ private fun showInputControls(profile: ControlsProfile, winHandler: WinHandler, 
             icView.setVisibility(View.VISIBLE)
             icView.requestFocus()
             icView.invalidate()
-            winHandler.refreshControllerMappings()
+            winHandler.refreshVirtualGamepadProfile()
         }
     }
 
     PluviaApp.touchpadView?.setSensitivity(profile.getCursorSpeed() * 1.0f)
 
-    // If the selected profile is a virtual gamepad, we must enable the P1 slot.
-    if (container.containerVariant.equals(Container.BIONIC) && profile.isVirtualGamepad()) {
-        val controllerManager: ControllerManager = ControllerManager.getInstance()
-
-        // Ensure Player 1 slot is enabled so a vjoy device is created for it.
-        controllerManager.setSlotEnabled(0, true)
-
-        // Clear any physical device from P1 to prevent conflicts.
-        controllerManager.unassignSlot(0)
-
-        // Tell WinHandler to update its internal state.
+    if (container.containerVariant.equals(Container.BIONIC) && profile.isVirtualGamepad() && !profile.hasWoWGamepad()) {
+        ControllerManager.getInstance().setSlotEnabled(0, true)
+        ControllerManager.getInstance().unassignSlot(0)
         winHandler.refreshControllerMappings()
     }
 }

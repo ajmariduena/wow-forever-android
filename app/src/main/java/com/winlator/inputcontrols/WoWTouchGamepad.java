@@ -1,6 +1,7 @@
 package com.winlator.inputcontrols;
 
 import android.graphics.*;
+import android.util.Log;
 import android.graphics.drawable.Drawable;
 import com.winlator.widget.InputControlsView;
 import org.json.JSONObject;
@@ -16,7 +17,7 @@ public final class WoWTouchGamepad {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final WoWTouchGeometry.Stick stick = new WoWTouchGeometry.Stick();
     private final WoWPointerGestures pointerGestures;
-    private int movementPointer = -1;
+    private int movementPointer = -1, mouseTogglePointer = -1;
     private float restX, restY, stickSize, zoneRight, zoneTop;
     private int width, height, hingeTop = -1, hingeBottom = -1;
     private boolean floatingStick = true, cameraDrag = true;
@@ -135,11 +136,13 @@ public final class WoWTouchGamepad {
     public boolean down(int id,float x,float y) {
         layout();
         for (Button b:buttons) if (b.hit(x,y)) {
-            if (b.label.equals("MOUSE")) { view.setWoWMouseMode(!view.isWoWMouseMode()); return true; }
-            if (b.pointer < 0) { b.pointer=id; view.handleInputEvent(b.binding,true); view.invalidate(); }
+            if (b.label.equals("MOUSE")) { view.setWoWMouseMode(!view.isWoWMouseMode()); mouseTogglePointer=id; Log.i("WoWTouch", "button down " + b.binding.name()); return true; }
+            if (b.pointer < 0) { b.pointer=id; Log.i("WoWTouch", "button down " + b.binding.name()); view.handleInputEvent(b.binding,true); view.invalidate(); }
             return true;
         }
-        boolean inGame = (hingeTop < 0 || y < hingeTop) && view.isWoWGamePoint(x, y);
+        boolean inPanel = hingeTop >= 0 && y >= hingeTop;
+        if (inPanel) Log.i("WoWTouch", "point in panel y=" + y + " edge=" + hingeTop);
+        boolean inGame = !inPanel && view.isWoWGamePoint(x, y);
         if (x <= zoneRight && y >= zoneTop && !(view.isWoWMouseMode() && inGame)) {
             if (movementPointer < 0) { movementPointer=id; stick.begin(floatingStick?x:restX,floatingStick?y:restY); view.invalidate(); }
             return true;
@@ -160,14 +163,16 @@ public final class WoWTouchGamepad {
     }
     public boolean up(int id) {
         boolean handled=false;
+        if (id >= 0 && id == mouseTogglePointer) { mouseTogglePointer=-1; Log.i("WoWTouch", "button up " + Binding.NONE.name()); handled=true; }
         if (id == movementPointer && id >= 0) { movementPointer=-1; stick.release(); axis(false,0,0); handled=true; }
-        for (Button b:buttons) if (b.pointer == id && id >= 0) { b.pointer=-1; view.handleInputEvent(b.binding,false); handled=true; }
+        for (Button b:buttons) if (b.pointer == id && id >= 0) { b.pointer=-1; Log.i("WoWTouch", "button up " + b.binding.name()); view.handleInputEvent(b.binding,false); handled=true; }
         if (pointerGestures.up(id)) handled = true;
         view.invalidate(); return handled;
     }
     public boolean cancel() {
         boolean active = movementPointer >= 0;
         if (pointerGestures.cancel()) active = true;
+        up(mouseTogglePointer);
         up(movementPointer);
         for (Button b:buttons) if (b.pointer >= 0) { up(b.pointer); active=true; }
         return active;

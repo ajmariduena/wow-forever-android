@@ -122,6 +122,28 @@ public class WinHandler {
     // Add method to set InputControlsView
     public void setInputControlsView(InputControlsView view) {
         this.inputControlsView = view;
+        if (view != null && view.isWoWGamepadProfileActive()) refreshVirtualGamepadProfile();
+    }
+
+    public void refreshVirtualGamepadProfile() {
+        ControlsProfile profile = inputControlsView != null ? inputControlsView.getProfile() : null;
+        if (isVirtualGamepadActive() && profile != null && profile.hasWoWGamepad()) {
+            if (!controllerManager.isSlotEnabled(0)) controllerManager.setSlotEnabled(0, true);
+            if (controllerManager.getAssignedDeviceForSlot(0) != null) controllerManager.unassignSlot(0);
+        }
+        refreshControllerMappings();
+    }
+
+    private Boolean lastWoWP1Connected;
+    private Boolean lastWoWP1Active;
+    private void logWoWP1(boolean connected) {
+        ControlsProfile p = inputControlsView != null ? inputControlsView.getProfile() : null;
+        if ((p == null || !p.hasWoWGamepad()) && lastWoWP1Connected == null) return;
+        boolean active = isVirtualGamepadActive();
+        if (lastWoWP1Connected == null || lastWoWP1Connected != connected || lastWoWP1Active == null || lastWoWP1Active != active) {
+            Log.i("WoWTouch", "P1 connected=" + connected + " virtualActive=" + active + " slotEnabled=" + controllerManager.isSlotEnabled(0) + " bufferReady=" + (gamepadBuffer != null));
+            lastWoWP1Connected = connected; lastWoWP1Active = active;
+        }
     }
 
     private static String describeDevice(InputDevice device) {
@@ -287,6 +309,7 @@ public class WinHandler {
 
         writeNeutralGamepadState(buffer);
         buffer.putInt(OFF_CONNECTED, 0);
+        if (slot == 0) logWoWP1(false);
         notifyStateChanged(slot);
         stopVibration(slot);
         lastLowFreq[slot] = 0;
@@ -297,6 +320,7 @@ public class WinHandler {
 
     private void setGamepadSlotConnected(int slot, boolean connected) {
         MappedByteBuffer buffer = getGamepadBuffer(slot);
+        if (slot == 0) logWoWP1(connected && buffer != null);
         if (buffer == null) {
             return;
         }
@@ -1152,6 +1176,7 @@ public class WinHandler {
 
     public void sendVirtualGamepadState(GamepadState state, int slot) {
         MappedByteBuffer buffer = getGamepadBuffer(slot);
+        if (slot == 0) logWoWP1(buffer != null && state != null);
         if (buffer == null || state == null) {
             return;
         }
